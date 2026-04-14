@@ -10,6 +10,7 @@ using Dapper;
 using Radzen;
 
 using CRMBlazorServerRBS.Models.RadzenCRM;
+using Task = System.Threading.Tasks.Task;
 
 namespace CRMBlazorServerRBS
 {
@@ -67,6 +68,30 @@ namespace CRMBlazorServerRBS
             OnContactsRead(ref items);
 
             return await Task.FromResult(items);
+        }
+
+        public async Task<(IEnumerable<CRMBlazorServerRBS.Models.RadzenCRM.Contact> Items, int TotalCount)> GetContactsPaged(
+            int skip = 0,
+            int top = 20,
+            string filter = null,
+            string orderBy = null)
+        {
+            var where = string.IsNullOrWhiteSpace(filter) ? "" : $"WHERE {filter}";
+            var order = string.IsNullOrWhiteSpace(orderBy) ? "[Id]" : orderBy;
+
+            var sql = $@"
+                SELECT COUNT(*) FROM [dbo].[Contacts] {where};
+
+                SELECT * FROM [dbo].[Contacts]
+                {where}
+                ORDER BY {order}
+                OFFSET @Skip ROWS FETCH NEXT @Top ROWS ONLY;";
+
+            using var multi = await db.QueryMultipleAsync(sql, new { Skip = skip, Top = top });
+            var totalCount = await multi.ReadFirstAsync<int>();
+            var items = await multi.ReadAsync<CRMBlazorServerRBS.Models.RadzenCRM.Contact>();
+
+            return (items, totalCount);
         }
 
         partial void OnContactGet(CRMBlazorServerRBS.Models.RadzenCRM.Contact item);
@@ -824,5 +849,40 @@ namespace CRMBlazorServerRBS
 
             return item;
         }
+
+        internal async Task<QueryResult> GetContactsPaged(Query query, string whereClause, DynamicParameters parameters)
+        {
+            parameters ??= new DynamicParameters();
+
+            var where    = string.IsNullOrWhiteSpace(whereClause) ? "" : $"WHERE {whereClause}";
+            var orderBy  = string.IsNullOrWhiteSpace(query?.OrderBy) ? "[Id]" : query.OrderBy;
+            var skip     = query?.Skip ?? 0;
+            var top      = query?.Top  ?? 20;
+
+            // Добавляем пагинацию в параметры
+            parameters.Add("__skip", skip);
+            parameters.Add("__top",  top);
+
+            var sql = $@"
+                SELECT COUNT(*) FROM [dbo].[Contacts] {where};
+
+                SELECT * FROM [dbo].[Contacts]
+                {where}
+                ORDER BY {orderBy}
+                OFFSET @__skip ROWS FETCH NEXT @__top ROWS ONLY;";
+
+            using var multi = await db.QueryMultipleAsync(sql, parameters);
+
+            var count = await multi.ReadFirstAsync<int>();
+            var items = (await multi.ReadAsync<Contact>()).ToList();
+
+            return new QueryResult { Items = items, Count = count };
+        }
+    }
+
+    public class QueryResult
+    {
+        public List<Contact> Items { get; set; }
+        public int Count { get; set; }
     }
 }
