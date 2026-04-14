@@ -1,65 +1,35 @@
-﻿using CRMBlazorServerRBS.Data;
-using CRMBlazorServerRBS.Models.RadzenCRM;
-using Dapper;
-using DataHelper;
-using DocumentFormat.OpenXml.InkML;
-using DocumentFormat.OpenXml.Spreadsheet;
-using Microsoft.AspNetCore.Components;
-using Microsoft.Data.SqlClient;
-using Microsoft.EntityFrameworkCore;
-using Radzen;
 using System;
-using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Linq.Dynamic.Core;
-using System.Text.Encodings.Web;
+using System.Collections.Generic;
 using System.Threading.Tasks;
-using Query = Radzen.Query;
-using Task = System.Threading.Tasks.Task;
+using System.Text.Encodings.Web;
+using Microsoft.AspNetCore.Components;
+using Dapper;
+using Radzen;
+
+using CRMBlazorServerRBS.Models.RadzenCRM;
 
 namespace CRMBlazorServerRBS
 {
-    public class PagedResult<T>
-    {
-        public IEnumerable<T> Items { get; set; }
-        public int Count { get; set; }
-    }
-    
-
-
     public partial class RadzenCRMService
     {
-        
-        RadzenCRMContext Context
-        {
-           get
-           {
-             return this.context;
-           }
-        }
-
-        private readonly RadzenCRMContext context;
+        private readonly IDbConnection db;
         private readonly NavigationManager navigationManager;
 
-        private readonly SqlConnection connection;
-
-
-
-        public RadzenCRMService(RadzenCRMContext context, NavigationManager navigationManager, SqlConnection connection)
+        public RadzenCRMService(IDbConnection db, NavigationManager navigationManager)
         {
-            this.context = context;
+            this.db = db;
             this.navigationManager = navigationManager;
-            this.connection = connection;
         }
 
-        public void Reset() => Context.ChangeTracker.Entries().Where(e => e.Entity != null).ToList().ForEach(e => e.State = EntityState.Detached);
+        public void Reset() { }
 
 
         public async Task ExportContactsToExcel(Query query = null, string fileName = null)
         {
-            var Url = query != null ? query.ToUrl($"export/radzencrm/contacts/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/contacts/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')";
-            navigationManager.NavigateTo( Url, true);
+            navigationManager.NavigateTo(query != null ? query.ToUrl($"export/radzencrm/contacts/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/contacts/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')", true);
         }
 
         public async Task ExportContactsToCSV(Query query = null, string fileName = null)
@@ -71,46 +41,27 @@ namespace CRMBlazorServerRBS
 
         public async Task<IQueryable<CRMBlazorServerRBS.Models.RadzenCRM.Contact>> GetContacts(Query query = null)
         {
-            var items = Context.Contacts.AsQueryable();
-
+            var contacts = await db.QueryAsync<CRMBlazorServerRBS.Models.RadzenCRM.Contact>(
+                "SELECT * FROM [dbo].[Contacts]");
+            var items = contacts.AsQueryable();
 
             if (query != null)
             {
-                if (!string.IsNullOrEmpty(query.Expand))
-                {
-                    var propertiesToExpand = query.Expand.Split(',');
-                    foreach(var p in propertiesToExpand)
-                    {
-                        items = items.Include(p.Trim());
-                    }
-                }
-
                 if (!string.IsNullOrEmpty(query.Filter))
                 {
-                    if (query.FilterParameters != null)
-                    {
-                        items = items.Where(query.Filter, query.FilterParameters);
-                    }
-                    else
-                    {
-                        items = items.Where(query.Filter);
-                    }
+                    items = query.FilterParameters != null
+                        ? items.Where(query.Filter, query.FilterParameters)
+                        : items.Where(query.Filter);
                 }
 
                 if (!string.IsNullOrEmpty(query.OrderBy))
-                {
                     items = items.OrderBy(query.OrderBy);
-                }
 
                 if (query.Skip.HasValue)
-                {
                     items = items.Skip(query.Skip.Value);
-                }
 
                 if (query.Top.HasValue)
-                {
                     items = items.Take(query.Top.Value);
-                }
             }
 
             OnContactsRead(ref items);
@@ -122,16 +73,12 @@ namespace CRMBlazorServerRBS
 
         public async Task<CRMBlazorServerRBS.Models.RadzenCRM.Contact> GetContactById(int id)
         {
-            var items = Context.Contacts
-                              .AsNoTracking()
-                              .Where(i => i.Id == id);
+            var item = await db.QueryFirstOrDefaultAsync<CRMBlazorServerRBS.Models.RadzenCRM.Contact>(
+                "SELECT * FROM [dbo].[Contacts] WHERE [Id] = @Id", new { Id = id });
 
-  
-            var itemToReturn = items.FirstOrDefault();
+            OnContactGet(item);
 
-            OnContactGet(itemToReturn);
-
-            return await Task.FromResult(itemToReturn);
+            return item;
         }
 
         partial void OnContactCreated(CRMBlazorServerRBS.Models.RadzenCRM.Contact item);
@@ -141,23 +88,16 @@ namespace CRMBlazorServerRBS
         {
             OnContactCreated(contact);
 
-            var existingItem = connection.Query<Contact>("select * from contacts where id = @id", new { id = contact.Id });
+            var existing = await db.QueryFirstOrDefaultAsync<int?>(
+                "SELECT [Id] FROM [dbo].[Contacts] WHERE [Id] = @Id", new { contact.Id });
 
-            if (existingItem != null)
-            {
-               throw new Exception("Item already available");
-            }            
+            if (existing != null)
+                throw new Exception("Item already available");
 
-            try
-            {
-                Context.Contacts.Add(contact);
-                Context.SaveChanges();
-            }
-            catch
-            {
-                Context.Entry(contact).State = EntityState.Detached;
-                throw;
-            }
+            contact.Id = await db.QuerySingleAsync<int>(
+                @"INSERT INTO [dbo].[Contacts] ([Email],[Company],[LastName],[FirstName],[Phone])
+                  VALUES (@Email,@Company,@LastName,@FirstName,@Phone);
+                  SELECT CAST(SCOPE_IDENTITY() AS INT);", contact);
 
             OnAfterContactCreated(contact);
 
@@ -166,14 +106,7 @@ namespace CRMBlazorServerRBS
 
         public async Task<CRMBlazorServerRBS.Models.RadzenCRM.Contact> CancelContactChanges(CRMBlazorServerRBS.Models.RadzenCRM.Contact item)
         {
-            var entityToCancel = Context.Entry(item);
-            if (entityToCancel.State == EntityState.Modified)
-            {
-              entityToCancel.CurrentValues.SetValues(entityToCancel.OriginalValues);
-              entityToCancel.State = EntityState.Unchanged;
-            }
-
-            return item;
+            return await GetContactById(item.Id);
         }
 
         partial void OnContactUpdated(CRMBlazorServerRBS.Models.RadzenCRM.Contact item);
@@ -183,20 +116,14 @@ namespace CRMBlazorServerRBS
         {
             OnContactUpdated(contact);
 
-            var itemToUpdate = Context.Contacts
-                              .Where(i => i.Id == contact.Id)
-                              .FirstOrDefault();
+            var rows = await db.ExecuteAsync(
+                @"UPDATE [dbo].[Contacts] SET
+                    [Email]=@Email,[Company]=@Company,[LastName]=@LastName,
+                    [FirstName]=@FirstName,[Phone]=@Phone
+                  WHERE [Id]=@Id", contact);
 
-            if (itemToUpdate == null)
-            {
-               throw new Exception("Item no longer available");
-            }
-                
-            var entryToUpdate = Context.Entry(itemToUpdate);
-            entryToUpdate.CurrentValues.SetValues(contact);
-            entryToUpdate.State = EntityState.Modified;
-
-            Context.SaveChanges();
+            if (rows == 0)
+                throw new Exception("Item no longer available");
 
             OnAfterContactUpdated(contact);
 
@@ -208,36 +135,21 @@ namespace CRMBlazorServerRBS
 
         public async Task<CRMBlazorServerRBS.Models.RadzenCRM.Contact> DeleteContact(int id)
         {
-            var itemToDelete = Context.Contacts
-                              .Where(i => i.Id == id)
-                              .Include(i => i.Opportunities)
-                              .FirstOrDefault();
+            var item = await db.QueryFirstOrDefaultAsync<CRMBlazorServerRBS.Models.RadzenCRM.Contact>(
+                "SELECT * FROM [dbo].[Contacts] WHERE [Id] = @Id", new { Id = id });
 
-            if (itemToDelete == null)
-            {
-               throw new Exception("Item no longer available");
-            }
+            if (item == null)
+                throw new Exception("Item no longer available");
 
-            OnContactDeleted(itemToDelete);
+            OnContactDeleted(item);
 
+            await db.ExecuteAsync("DELETE FROM [dbo].[Contacts] WHERE [Id] = @Id", new { Id = id });
 
-            Context.Contacts.Remove(itemToDelete);
+            OnAfterContactDeleted(item);
 
-            try
-            {
-                Context.SaveChanges();
-            }
-            catch
-            {
-                Context.Entry(itemToDelete).State = EntityState.Unchanged;
-                throw;
-            }
-
-            OnAfterContactDeleted(itemToDelete);
-
-            return itemToDelete;
+            return item;
         }
-    
+
         public async Task ExportOpportunitiesToExcel(Query query = null, string fileName = null)
         {
             navigationManager.NavigateTo(query != null ? query.ToUrl($"export/radzencrm/opportunities/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/opportunities/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')", true);
@@ -252,48 +164,46 @@ namespace CRMBlazorServerRBS
 
         public async Task<IQueryable<CRMBlazorServerRBS.Models.RadzenCRM.Opportunity>> GetOpportunities(Query query = null)
         {
-            var items = Context.Opportunities.AsQueryable();
+            var opportunities = (await db.QueryAsync<CRMBlazorServerRBS.Models.RadzenCRM.Opportunity>(
+                "SELECT * FROM [dbo].[Opportunities]")).ToList();
 
-            items = items.Include(i => i.Contact);
-            items = items.Include(i => i.OpportunityStatus);
+            var contacts = (await db.QueryAsync<CRMBlazorServerRBS.Models.RadzenCRM.Contact>(
+                "SELECT * FROM [dbo].[Contacts]")).ToDictionary(c => c.Id);
+
+            var statuses = (await db.QueryAsync<CRMBlazorServerRBS.Models.RadzenCRM.OpportunityStatus>(
+                "SELECT * FROM [dbo].[OpportunityStatuses]")).ToDictionary(s => s.Id);
+
+            var users = (await db.QueryAsync<CRMBlazorServerRBS.Models.ApplicationUser>(
+                "SELECT [Id],[UserName],[Email],[FirstName],[LastName],[Picture] FROM [dbo].[AspNetUsers]"))
+                .ToDictionary(u => u.Id);
+
+            foreach (var opp in opportunities)
+            {
+                opp.Contact = contacts.GetValueOrDefault(opp.ContactId);
+                opp.OpportunityStatus = statuses.GetValueOrDefault(opp.StatusId);
+                if (!string.IsNullOrEmpty(opp.UserId))
+                    opp.User = users.GetValueOrDefault(opp.UserId);
+            }
+
+            var items = opportunities.AsQueryable();
 
             if (query != null)
             {
-                if (!string.IsNullOrEmpty(query.Expand))
-                {
-                    var propertiesToExpand = query.Expand.Split(',');
-                    foreach(var p in propertiesToExpand)
-                    {
-                        items = items.Include(p.Trim());
-                    }
-                }
-
                 if (!string.IsNullOrEmpty(query.Filter))
                 {
-                    if (query.FilterParameters != null)
-                    {
-                        items = items.Where(query.Filter, query.FilterParameters);
-                    }
-                    else
-                    {
-                        items = items.Where(query.Filter);
-                    }
+                    items = query.FilterParameters != null
+                        ? items.Where(query.Filter, query.FilterParameters)
+                        : items.Where(query.Filter);
                 }
 
                 if (!string.IsNullOrEmpty(query.OrderBy))
-                {
                     items = items.OrderBy(query.OrderBy);
-                }
 
                 if (query.Skip.HasValue)
-                {
                     items = items.Skip(query.Skip.Value);
-                }
 
                 if (query.Top.HasValue)
-                {
                     items = items.Take(query.Top.Value);
-                }
             }
 
             OnOpportunitiesRead(ref items);
@@ -305,18 +215,20 @@ namespace CRMBlazorServerRBS
 
         public async Task<CRMBlazorServerRBS.Models.RadzenCRM.Opportunity> GetOpportunityById(int id)
         {
-            var items = Context.Opportunities
-                              .AsNoTracking()
-                              .Where(i => i.Id == id);
+            var item = await db.QueryFirstOrDefaultAsync<CRMBlazorServerRBS.Models.RadzenCRM.Opportunity>(
+                "SELECT * FROM [dbo].[Opportunities] WHERE [Id] = @Id", new { Id = id });
 
-            items = items.Include(i => i.Contact);
-            items = items.Include(i => i.OpportunityStatus);
-  
-            var itemToReturn = items.FirstOrDefault();
+            if (item != null)
+            {
+                item.Contact = await db.QueryFirstOrDefaultAsync<CRMBlazorServerRBS.Models.RadzenCRM.Contact>(
+                    "SELECT * FROM [dbo].[Contacts] WHERE [Id] = @Id", new { Id = item.ContactId });
+                item.OpportunityStatus = await db.QueryFirstOrDefaultAsync<CRMBlazorServerRBS.Models.RadzenCRM.OpportunityStatus>(
+                    "SELECT * FROM [dbo].[OpportunityStatuses] WHERE [Id] = @Id", new { Id = item.StatusId });
+            }
 
-            OnOpportunityGet(itemToReturn);
+            OnOpportunityGet(item);
 
-            return await Task.FromResult(itemToReturn);
+            return item;
         }
 
         partial void OnOpportunityCreated(CRMBlazorServerRBS.Models.RadzenCRM.Opportunity item);
@@ -326,25 +238,16 @@ namespace CRMBlazorServerRBS
         {
             OnOpportunityCreated(opportunity);
 
-            var existingItem = Context.Opportunities
-                              .Where(i => i.Id == opportunity.Id)
-                              .FirstOrDefault();
+            var existing = await db.QueryFirstOrDefaultAsync<int?>(
+                "SELECT [Id] FROM [dbo].[Opportunities] WHERE [Id] = @Id", new { opportunity.Id });
 
-            if (existingItem != null)
-            {
-               throw new Exception("Item already available");
-            }            
+            if (existing != null)
+                throw new Exception("Item already available");
 
-            try
-            {
-                Context.Opportunities.Add(opportunity);
-                Context.SaveChanges();
-            }
-            catch
-            {
-                Context.Entry(opportunity).State = EntityState.Detached;
-                throw;
-            }
+            opportunity.Id = await db.QuerySingleAsync<int>(
+                @"INSERT INTO [dbo].[Opportunities] ([Amount],[Name],[UserId],[ContactId],[StatusId],[CloseDate])
+                  VALUES (@Amount,@Name,@UserId,@ContactId,@StatusId,@CloseDate);
+                  SELECT CAST(SCOPE_IDENTITY() AS INT);", opportunity);
 
             OnAfterOpportunityCreated(opportunity);
 
@@ -353,14 +256,7 @@ namespace CRMBlazorServerRBS
 
         public async Task<CRMBlazorServerRBS.Models.RadzenCRM.Opportunity> CancelOpportunityChanges(CRMBlazorServerRBS.Models.RadzenCRM.Opportunity item)
         {
-            var entityToCancel = Context.Entry(item);
-            if (entityToCancel.State == EntityState.Modified)
-            {
-              entityToCancel.CurrentValues.SetValues(entityToCancel.OriginalValues);
-              entityToCancel.State = EntityState.Unchanged;
-            }
-
-            return item;
+            return await GetOpportunityById(item.Id);
         }
 
         partial void OnOpportunityUpdated(CRMBlazorServerRBS.Models.RadzenCRM.Opportunity item);
@@ -370,20 +266,14 @@ namespace CRMBlazorServerRBS
         {
             OnOpportunityUpdated(opportunity);
 
-            var itemToUpdate = Context.Opportunities
-                              .Where(i => i.Id == opportunity.Id)
-                              .FirstOrDefault();
+            var rows = await db.ExecuteAsync(
+                @"UPDATE [dbo].[Opportunities] SET
+                    [Amount]=@Amount,[Name]=@Name,[UserId]=@UserId,
+                    [ContactId]=@ContactId,[StatusId]=@StatusId,[CloseDate]=@CloseDate
+                  WHERE [Id]=@Id", opportunity);
 
-            if (itemToUpdate == null)
-            {
-               throw new Exception("Item no longer available");
-            }
-                
-            var entryToUpdate = Context.Entry(itemToUpdate);
-            entryToUpdate.CurrentValues.SetValues(opportunity);
-            entryToUpdate.State = EntityState.Modified;
-
-            Context.SaveChanges();
+            if (rows == 0)
+                throw new Exception("Item no longer available");
 
             OnAfterOpportunityUpdated(opportunity);
 
@@ -395,36 +285,21 @@ namespace CRMBlazorServerRBS
 
         public async Task<CRMBlazorServerRBS.Models.RadzenCRM.Opportunity> DeleteOpportunity(int id)
         {
-            var itemToDelete = Context.Opportunities
-                              .Where(i => i.Id == id)
-                              .Include(i => i.Tasks)
-                              .FirstOrDefault();
+            var item = await db.QueryFirstOrDefaultAsync<CRMBlazorServerRBS.Models.RadzenCRM.Opportunity>(
+                "SELECT * FROM [dbo].[Opportunities] WHERE [Id] = @Id", new { Id = id });
 
-            if (itemToDelete == null)
-            {
-               throw new Exception("Item no longer available");
-            }
+            if (item == null)
+                throw new Exception("Item no longer available");
 
-            OnOpportunityDeleted(itemToDelete);
+            OnOpportunityDeleted(item);
 
+            await db.ExecuteAsync("DELETE FROM [dbo].[Opportunities] WHERE [Id] = @Id", new { Id = id });
 
-            Context.Opportunities.Remove(itemToDelete);
+            OnAfterOpportunityDeleted(item);
 
-            try
-            {
-                Context.SaveChanges();
-            }
-            catch
-            {
-                Context.Entry(itemToDelete).State = EntityState.Unchanged;
-                throw;
-            }
-
-            OnAfterOpportunityDeleted(itemToDelete);
-
-            return itemToDelete;
+            return item;
         }
-    
+
         public async Task ExportOpportunityStatusesToExcel(Query query = null, string fileName = null)
         {
             navigationManager.NavigateTo(query != null ? query.ToUrl($"export/radzencrm/opportunitystatuses/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/opportunitystatuses/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')", true);
@@ -439,46 +314,27 @@ namespace CRMBlazorServerRBS
 
         public async Task<IQueryable<CRMBlazorServerRBS.Models.RadzenCRM.OpportunityStatus>> GetOpportunityStatuses(Query query = null)
         {
-            var items = Context.OpportunityStatuses.AsQueryable();
-
+            var statuses = await db.QueryAsync<CRMBlazorServerRBS.Models.RadzenCRM.OpportunityStatus>(
+                "SELECT * FROM [dbo].[OpportunityStatuses]");
+            var items = statuses.AsQueryable();
 
             if (query != null)
             {
-                if (!string.IsNullOrEmpty(query.Expand))
-                {
-                    var propertiesToExpand = query.Expand.Split(',');
-                    foreach(var p in propertiesToExpand)
-                    {
-                        items = items.Include(p.Trim());
-                    }
-                }
-
                 if (!string.IsNullOrEmpty(query.Filter))
                 {
-                    if (query.FilterParameters != null)
-                    {
-                        items = items.Where(query.Filter, query.FilterParameters);
-                    }
-                    else
-                    {
-                        items = items.Where(query.Filter);
-                    }
+                    items = query.FilterParameters != null
+                        ? items.Where(query.Filter, query.FilterParameters)
+                        : items.Where(query.Filter);
                 }
 
                 if (!string.IsNullOrEmpty(query.OrderBy))
-                {
                     items = items.OrderBy(query.OrderBy);
-                }
 
                 if (query.Skip.HasValue)
-                {
                     items = items.Skip(query.Skip.Value);
-                }
 
                 if (query.Top.HasValue)
-                {
                     items = items.Take(query.Top.Value);
-                }
             }
 
             OnOpportunityStatusesRead(ref items);
@@ -490,16 +346,12 @@ namespace CRMBlazorServerRBS
 
         public async Task<CRMBlazorServerRBS.Models.RadzenCRM.OpportunityStatus> GetOpportunityStatusById(int id)
         {
-            var items = Context.OpportunityStatuses
-                              .AsNoTracking()
-                              .Where(i => i.Id == id);
+            var item = await db.QueryFirstOrDefaultAsync<CRMBlazorServerRBS.Models.RadzenCRM.OpportunityStatus>(
+                "SELECT * FROM [dbo].[OpportunityStatuses] WHERE [Id] = @Id", new { Id = id });
 
-  
-            var itemToReturn = items.FirstOrDefault();
+            OnOpportunityStatusGet(item);
 
-            OnOpportunityStatusGet(itemToReturn);
-
-            return await Task.FromResult(itemToReturn);
+            return item;
         }
 
         partial void OnOpportunityStatusCreated(CRMBlazorServerRBS.Models.RadzenCRM.OpportunityStatus item);
@@ -509,25 +361,15 @@ namespace CRMBlazorServerRBS
         {
             OnOpportunityStatusCreated(opportunitystatus);
 
-            var existingItem = Context.OpportunityStatuses
-                              .Where(i => i.Id == opportunitystatus.Id)
-                              .FirstOrDefault();
+            var existing = await db.QueryFirstOrDefaultAsync<int?>(
+                "SELECT [Id] FROM [dbo].[OpportunityStatuses] WHERE [Id] = @Id", new { opportunitystatus.Id });
 
-            if (existingItem != null)
-            {
-               throw new Exception("Item already available");
-            }            
+            if (existing != null)
+                throw new Exception("Item already available");
 
-            try
-            {
-                Context.OpportunityStatuses.Add(opportunitystatus);
-                Context.SaveChanges();
-            }
-            catch
-            {
-                Context.Entry(opportunitystatus).State = EntityState.Detached;
-                throw;
-            }
+            opportunitystatus.Id = await db.QuerySingleAsync<int>(
+                @"INSERT INTO [dbo].[OpportunityStatuses] ([Name]) VALUES (@Name);
+                  SELECT CAST(SCOPE_IDENTITY() AS INT);", opportunitystatus);
 
             OnAfterOpportunityStatusCreated(opportunitystatus);
 
@@ -536,14 +378,7 @@ namespace CRMBlazorServerRBS
 
         public async Task<CRMBlazorServerRBS.Models.RadzenCRM.OpportunityStatus> CancelOpportunityStatusChanges(CRMBlazorServerRBS.Models.RadzenCRM.OpportunityStatus item)
         {
-            var entityToCancel = Context.Entry(item);
-            if (entityToCancel.State == EntityState.Modified)
-            {
-              entityToCancel.CurrentValues.SetValues(entityToCancel.OriginalValues);
-              entityToCancel.State = EntityState.Unchanged;
-            }
-
-            return item;
+            return await GetOpportunityStatusById(item.Id);
         }
 
         partial void OnOpportunityStatusUpdated(CRMBlazorServerRBS.Models.RadzenCRM.OpportunityStatus item);
@@ -553,20 +388,11 @@ namespace CRMBlazorServerRBS
         {
             OnOpportunityStatusUpdated(opportunitystatus);
 
-            var itemToUpdate = Context.OpportunityStatuses
-                              .Where(i => i.Id == opportunitystatus.Id)
-                              .FirstOrDefault();
+            var rows = await db.ExecuteAsync(
+                "UPDATE [dbo].[OpportunityStatuses] SET [Name]=@Name WHERE [Id]=@Id", opportunitystatus);
 
-            if (itemToUpdate == null)
-            {
-               throw new Exception("Item no longer available");
-            }
-                
-            var entryToUpdate = Context.Entry(itemToUpdate);
-            entryToUpdate.CurrentValues.SetValues(opportunitystatus);
-            entryToUpdate.State = EntityState.Modified;
-
-            Context.SaveChanges();
+            if (rows == 0)
+                throw new Exception("Item no longer available");
 
             OnAfterOpportunityStatusUpdated(opportunitystatus);
 
@@ -578,36 +404,21 @@ namespace CRMBlazorServerRBS
 
         public async Task<CRMBlazorServerRBS.Models.RadzenCRM.OpportunityStatus> DeleteOpportunityStatus(int id)
         {
-            var itemToDelete = Context.OpportunityStatuses
-                              .Where(i => i.Id == id)
-                              .Include(i => i.Opportunities)
-                              .FirstOrDefault();
+            var item = await db.QueryFirstOrDefaultAsync<CRMBlazorServerRBS.Models.RadzenCRM.OpportunityStatus>(
+                "SELECT * FROM [dbo].[OpportunityStatuses] WHERE [Id] = @Id", new { Id = id });
 
-            if (itemToDelete == null)
-            {
-               throw new Exception("Item no longer available");
-            }
+            if (item == null)
+                throw new Exception("Item no longer available");
 
-            OnOpportunityStatusDeleted(itemToDelete);
+            OnOpportunityStatusDeleted(item);
 
+            await db.ExecuteAsync("DELETE FROM [dbo].[OpportunityStatuses] WHERE [Id] = @Id", new { Id = id });
 
-            Context.OpportunityStatuses.Remove(itemToDelete);
+            OnAfterOpportunityStatusDeleted(item);
 
-            try
-            {
-                Context.SaveChanges();
-            }
-            catch
-            {
-                Context.Entry(itemToDelete).State = EntityState.Unchanged;
-                throw;
-            }
-
-            OnAfterOpportunityStatusDeleted(itemToDelete);
-
-            return itemToDelete;
+            return item;
         }
-    
+
         public async Task ExportTasksToExcel(Query query = null, string fileName = null)
         {
             navigationManager.NavigateTo(query != null ? query.ToUrl($"export/radzencrm/tasks/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/tasks/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')", true);
@@ -622,49 +433,61 @@ namespace CRMBlazorServerRBS
 
         public async Task<IQueryable<CRMBlazorServerRBS.Models.RadzenCRM.Task>> GetTasks(Query query = null)
         {
-            var items = Context.Tasks.AsQueryable();
+            var tasks = (await db.QueryAsync<CRMBlazorServerRBS.Models.RadzenCRM.Task>(
+                "SELECT * FROM [dbo].[Tasks]")).ToList();
 
-            items = items.Include(i => i.Opportunity);
-            items = items.Include(i => i.TaskStatus);
-            items = items.Include(i => i.TaskType);
+            var opportunities = (await db.QueryAsync<CRMBlazorServerRBS.Models.RadzenCRM.Opportunity>(
+                "SELECT * FROM [dbo].[Opportunities]")).ToList();
+
+            var contacts = (await db.QueryAsync<CRMBlazorServerRBS.Models.RadzenCRM.Contact>(
+                "SELECT * FROM [dbo].[Contacts]")).ToDictionary(c => c.Id);
+
+            var users = (await db.QueryAsync<CRMBlazorServerRBS.Models.ApplicationUser>(
+                "SELECT [Id],[UserName],[Email],[FirstName],[LastName],[Picture] FROM [dbo].[AspNetUsers]"))
+                .ToDictionary(u => u.Id);
+
+            var taskStatuses = (await db.QueryAsync<CRMBlazorServerRBS.Models.RadzenCRM.TaskStatus>(
+                "SELECT * FROM [dbo].[TaskStatuses]")).ToDictionary(s => s.Id);
+
+            var taskTypes = (await db.QueryAsync<CRMBlazorServerRBS.Models.RadzenCRM.TaskType>(
+                "SELECT * FROM [dbo].[TaskTypes]")).ToDictionary(t => t.Id);
+
+            foreach (var opp in opportunities)
+            {
+                opp.Contact = contacts.GetValueOrDefault(opp.ContactId);
+                if (!string.IsNullOrEmpty(opp.UserId))
+                    opp.User = users.GetValueOrDefault(opp.UserId);
+            }
+
+            var opportunitiesById = opportunities.ToDictionary(o => o.Id);
+
+            foreach (var task in tasks)
+            {
+                task.Opportunity = opportunitiesById.GetValueOrDefault(task.OpportunityId);
+                if (task.StatusId.HasValue)
+                    task.TaskStatus = taskStatuses.GetValueOrDefault(task.StatusId.Value);
+                task.TaskType = taskTypes.GetValueOrDefault(task.TypeId);
+            }
+
+            var items = tasks.AsQueryable();
 
             if (query != null)
             {
-                if (!string.IsNullOrEmpty(query.Expand))
-                {
-                    var propertiesToExpand = query.Expand.Split(',');
-                    foreach(var p in propertiesToExpand)
-                    {
-                        items = items.Include(p.Trim());
-                    }
-                }
-
                 if (!string.IsNullOrEmpty(query.Filter))
                 {
-                    if (query.FilterParameters != null)
-                    {
-                        items = items.Where(query.Filter, query.FilterParameters);
-                    }
-                    else
-                    {
-                        items = items.Where(query.Filter);
-                    }
+                    items = query.FilterParameters != null
+                        ? items.Where(query.Filter, query.FilterParameters)
+                        : items.Where(query.Filter);
                 }
 
                 if (!string.IsNullOrEmpty(query.OrderBy))
-                {
                     items = items.OrderBy(query.OrderBy);
-                }
 
                 if (query.Skip.HasValue)
-                {
                     items = items.Skip(query.Skip.Value);
-                }
 
                 if (query.Top.HasValue)
-                {
                     items = items.Take(query.Top.Value);
-                }
             }
 
             OnTasksRead(ref items);
@@ -676,19 +499,23 @@ namespace CRMBlazorServerRBS
 
         public async Task<CRMBlazorServerRBS.Models.RadzenCRM.Task> GetTaskById(int id)
         {
-            var items = Context.Tasks
-                              .AsNoTracking()
-                              .Where(i => i.Id == id);
+            var item = await db.QueryFirstOrDefaultAsync<CRMBlazorServerRBS.Models.RadzenCRM.Task>(
+                "SELECT * FROM [dbo].[Tasks] WHERE [Id] = @Id", new { Id = id });
 
-            items = items.Include(i => i.Opportunity);
-            items = items.Include(i => i.TaskStatus);
-            items = items.Include(i => i.TaskType);
-  
-            var itemToReturn = items.FirstOrDefault();
+            if (item != null)
+            {
+                item.Opportunity = await db.QueryFirstOrDefaultAsync<CRMBlazorServerRBS.Models.RadzenCRM.Opportunity>(
+                    "SELECT * FROM [dbo].[Opportunities] WHERE [Id] = @Id", new { Id = item.OpportunityId });
+                if (item.StatusId.HasValue)
+                    item.TaskStatus = await db.QueryFirstOrDefaultAsync<CRMBlazorServerRBS.Models.RadzenCRM.TaskStatus>(
+                        "SELECT * FROM [dbo].[TaskStatuses] WHERE [Id] = @Id", new { Id = item.StatusId.Value });
+                item.TaskType = await db.QueryFirstOrDefaultAsync<CRMBlazorServerRBS.Models.RadzenCRM.TaskType>(
+                    "SELECT * FROM [dbo].[TaskTypes] WHERE [Id] = @Id", new { Id = item.TypeId });
+            }
 
-            OnTaskGet(itemToReturn);
+            OnTaskGet(item);
 
-            return await Task.FromResult(itemToReturn);
+            return item;
         }
 
         partial void OnTaskCreated(CRMBlazorServerRBS.Models.RadzenCRM.Task item);
@@ -698,25 +525,16 @@ namespace CRMBlazorServerRBS
         {
             OnTaskCreated(task);
 
-            var existingItem = Context.Tasks
-                              .Where(i => i.Id == task.Id)
-                              .FirstOrDefault();
+            var existing = await db.QueryFirstOrDefaultAsync<int?>(
+                "SELECT [Id] FROM [dbo].[Tasks] WHERE [Id] = @Id", new { task.Id });
 
-            if (existingItem != null)
-            {
-               throw new Exception("Item already available");
-            }            
+            if (existing != null)
+                throw new Exception("Item already available");
 
-            try
-            {
-                Context.Tasks.Add(task);
-                Context.SaveChanges();
-            }
-            catch
-            {
-                Context.Entry(task).State = EntityState.Detached;
-                throw;
-            }
+            task.Id = await db.QuerySingleAsync<int>(
+                @"INSERT INTO [dbo].[Tasks] ([Title],[OpportunityId],[DueDate],[TypeId],[StatusId])
+                  VALUES (@Title,@OpportunityId,@DueDate,@TypeId,@StatusId);
+                  SELECT CAST(SCOPE_IDENTITY() AS INT);", task);
 
             OnAfterTaskCreated(task);
 
@@ -725,14 +543,7 @@ namespace CRMBlazorServerRBS
 
         public async Task<CRMBlazorServerRBS.Models.RadzenCRM.Task> CancelTaskChanges(CRMBlazorServerRBS.Models.RadzenCRM.Task item)
         {
-            var entityToCancel = Context.Entry(item);
-            if (entityToCancel.State == EntityState.Modified)
-            {
-              entityToCancel.CurrentValues.SetValues(entityToCancel.OriginalValues);
-              entityToCancel.State = EntityState.Unchanged;
-            }
-
-            return item;
+            return await GetTaskById(item.Id);
         }
 
         partial void OnTaskUpdated(CRMBlazorServerRBS.Models.RadzenCRM.Task item);
@@ -742,20 +553,14 @@ namespace CRMBlazorServerRBS
         {
             OnTaskUpdated(task);
 
-            var itemToUpdate = Context.Tasks
-                              .Where(i => i.Id == task.Id)
-                              .FirstOrDefault();
+            var rows = await db.ExecuteAsync(
+                @"UPDATE [dbo].[Tasks] SET
+                    [Title]=@Title,[OpportunityId]=@OpportunityId,
+                    [DueDate]=@DueDate,[TypeId]=@TypeId,[StatusId]=@StatusId
+                  WHERE [Id]=@Id", task);
 
-            if (itemToUpdate == null)
-            {
-               throw new Exception("Item no longer available");
-            }
-                
-            var entryToUpdate = Context.Entry(itemToUpdate);
-            entryToUpdate.CurrentValues.SetValues(task);
-            entryToUpdate.State = EntityState.Modified;
-
-            Context.SaveChanges();
+            if (rows == 0)
+                throw new Exception("Item no longer available");
 
             OnAfterTaskUpdated(task);
 
@@ -767,35 +572,21 @@ namespace CRMBlazorServerRBS
 
         public async Task<CRMBlazorServerRBS.Models.RadzenCRM.Task> DeleteTask(int id)
         {
-            var itemToDelete = Context.Tasks
-                              .Where(i => i.Id == id)
-                              .FirstOrDefault();
+            var item = await db.QueryFirstOrDefaultAsync<CRMBlazorServerRBS.Models.RadzenCRM.Task>(
+                "SELECT * FROM [dbo].[Tasks] WHERE [Id] = @Id", new { Id = id });
 
-            if (itemToDelete == null)
-            {
-               throw new Exception("Item no longer available");
-            }
+            if (item == null)
+                throw new Exception("Item no longer available");
 
-            OnTaskDeleted(itemToDelete);
+            OnTaskDeleted(item);
 
+            await db.ExecuteAsync("DELETE FROM [dbo].[Tasks] WHERE [Id] = @Id", new { Id = id });
 
-            Context.Tasks.Remove(itemToDelete);
+            OnAfterTaskDeleted(item);
 
-            try
-            {
-                Context.SaveChanges();
-            }
-            catch
-            {
-                Context.Entry(itemToDelete).State = EntityState.Unchanged;
-                throw;
-            }
-
-            OnAfterTaskDeleted(itemToDelete);
-
-            return itemToDelete;
+            return item;
         }
-    
+
         public async Task ExportTaskStatusesToExcel(Query query = null, string fileName = null)
         {
             navigationManager.NavigateTo(query != null ? query.ToUrl($"export/radzencrm/taskstatuses/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/taskstatuses/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')", true);
@@ -810,46 +601,27 @@ namespace CRMBlazorServerRBS
 
         public async Task<IQueryable<CRMBlazorServerRBS.Models.RadzenCRM.TaskStatus>> GetTaskStatuses(Query query = null)
         {
-            var items = Context.TaskStatuses.AsQueryable();
-
+            var statuses = await db.QueryAsync<CRMBlazorServerRBS.Models.RadzenCRM.TaskStatus>(
+                "SELECT * FROM [dbo].[TaskStatuses]");
+            var items = statuses.AsQueryable();
 
             if (query != null)
             {
-                if (!string.IsNullOrEmpty(query.Expand))
-                {
-                    var propertiesToExpand = query.Expand.Split(',');
-                    foreach(var p in propertiesToExpand)
-                    {
-                        items = items.Include(p.Trim());
-                    }
-                }
-
                 if (!string.IsNullOrEmpty(query.Filter))
                 {
-                    if (query.FilterParameters != null)
-                    {
-                        items = items.Where(query.Filter, query.FilterParameters);
-                    }
-                    else
-                    {
-                        items = items.Where(query.Filter);
-                    }
+                    items = query.FilterParameters != null
+                        ? items.Where(query.Filter, query.FilterParameters)
+                        : items.Where(query.Filter);
                 }
 
                 if (!string.IsNullOrEmpty(query.OrderBy))
-                {
                     items = items.OrderBy(query.OrderBy);
-                }
 
                 if (query.Skip.HasValue)
-                {
                     items = items.Skip(query.Skip.Value);
-                }
 
                 if (query.Top.HasValue)
-                {
                     items = items.Take(query.Top.Value);
-                }
             }
 
             OnTaskStatusesRead(ref items);
@@ -861,16 +633,12 @@ namespace CRMBlazorServerRBS
 
         public async Task<CRMBlazorServerRBS.Models.RadzenCRM.TaskStatus> GetTaskStatusById(int id)
         {
-            var items = Context.TaskStatuses
-                              .AsNoTracking()
-                              .Where(i => i.Id == id);
+            var item = await db.QueryFirstOrDefaultAsync<CRMBlazorServerRBS.Models.RadzenCRM.TaskStatus>(
+                "SELECT * FROM [dbo].[TaskStatuses] WHERE [Id] = @Id", new { Id = id });
 
-  
-            var itemToReturn = items.FirstOrDefault();
+            OnTaskStatusGet(item);
 
-            OnTaskStatusGet(itemToReturn);
-
-            return await Task.FromResult(itemToReturn);
+            return item;
         }
 
         partial void OnTaskStatusCreated(CRMBlazorServerRBS.Models.RadzenCRM.TaskStatus item);
@@ -880,25 +648,15 @@ namespace CRMBlazorServerRBS
         {
             OnTaskStatusCreated(taskstatus);
 
-            var existingItem = Context.TaskStatuses
-                              .Where(i => i.Id == taskstatus.Id)
-                              .FirstOrDefault();
+            var existing = await db.QueryFirstOrDefaultAsync<int?>(
+                "SELECT [Id] FROM [dbo].[TaskStatuses] WHERE [Id] = @Id", new { taskstatus.Id });
 
-            if (existingItem != null)
-            {
-               throw new Exception("Item already available");
-            }            
+            if (existing != null)
+                throw new Exception("Item already available");
 
-            try
-            {
-                Context.TaskStatuses.Add(taskstatus);
-                Context.SaveChanges();
-            }
-            catch
-            {
-                Context.Entry(taskstatus).State = EntityState.Detached;
-                throw;
-            }
+            taskstatus.Id = await db.QuerySingleAsync<int>(
+                @"INSERT INTO [dbo].[TaskStatuses] ([Name]) VALUES (@Name);
+                  SELECT CAST(SCOPE_IDENTITY() AS INT);", taskstatus);
 
             OnAfterTaskStatusCreated(taskstatus);
 
@@ -907,14 +665,7 @@ namespace CRMBlazorServerRBS
 
         public async Task<CRMBlazorServerRBS.Models.RadzenCRM.TaskStatus> CancelTaskStatusChanges(CRMBlazorServerRBS.Models.RadzenCRM.TaskStatus item)
         {
-            var entityToCancel = Context.Entry(item);
-            if (entityToCancel.State == EntityState.Modified)
-            {
-              entityToCancel.CurrentValues.SetValues(entityToCancel.OriginalValues);
-              entityToCancel.State = EntityState.Unchanged;
-            }
-
-            return item;
+            return await GetTaskStatusById(item.Id);
         }
 
         partial void OnTaskStatusUpdated(CRMBlazorServerRBS.Models.RadzenCRM.TaskStatus item);
@@ -924,20 +675,11 @@ namespace CRMBlazorServerRBS
         {
             OnTaskStatusUpdated(taskstatus);
 
-            var itemToUpdate = Context.TaskStatuses
-                              .Where(i => i.Id == taskstatus.Id)
-                              .FirstOrDefault();
+            var rows = await db.ExecuteAsync(
+                "UPDATE [dbo].[TaskStatuses] SET [Name]=@Name WHERE [Id]=@Id", taskstatus);
 
-            if (itemToUpdate == null)
-            {
-               throw new Exception("Item no longer available");
-            }
-                
-            var entryToUpdate = Context.Entry(itemToUpdate);
-            entryToUpdate.CurrentValues.SetValues(taskstatus);
-            entryToUpdate.State = EntityState.Modified;
-
-            Context.SaveChanges();
+            if (rows == 0)
+                throw new Exception("Item no longer available");
 
             OnAfterTaskStatusUpdated(taskstatus);
 
@@ -949,36 +691,21 @@ namespace CRMBlazorServerRBS
 
         public async Task<CRMBlazorServerRBS.Models.RadzenCRM.TaskStatus> DeleteTaskStatus(int id)
         {
-            var itemToDelete = Context.TaskStatuses
-                              .Where(i => i.Id == id)
-                              .Include(i => i.Tasks)
-                              .FirstOrDefault();
+            var item = await db.QueryFirstOrDefaultAsync<CRMBlazorServerRBS.Models.RadzenCRM.TaskStatus>(
+                "SELECT * FROM [dbo].[TaskStatuses] WHERE [Id] = @Id", new { Id = id });
 
-            if (itemToDelete == null)
-            {
-               throw new Exception("Item no longer available");
-            }
+            if (item == null)
+                throw new Exception("Item no longer available");
 
-            OnTaskStatusDeleted(itemToDelete);
+            OnTaskStatusDeleted(item);
 
+            await db.ExecuteAsync("DELETE FROM [dbo].[TaskStatuses] WHERE [Id] = @Id", new { Id = id });
 
-            Context.TaskStatuses.Remove(itemToDelete);
+            OnAfterTaskStatusDeleted(item);
 
-            try
-            {
-                Context.SaveChanges();
-            }
-            catch
-            {
-                Context.Entry(itemToDelete).State = EntityState.Unchanged;
-                throw;
-            }
-
-            OnAfterTaskStatusDeleted(itemToDelete);
-
-            return itemToDelete;
+            return item;
         }
-    
+
         public async Task ExportTaskTypesToExcel(Query query = null, string fileName = null)
         {
             navigationManager.NavigateTo(query != null ? query.ToUrl($"export/radzencrm/tasktypes/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/tasktypes/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')", true);
@@ -993,46 +720,27 @@ namespace CRMBlazorServerRBS
 
         public async Task<IQueryable<CRMBlazorServerRBS.Models.RadzenCRM.TaskType>> GetTaskTypes(Query query = null)
         {
-            var items = Context.TaskTypes.AsQueryable();
-
+            var types = await db.QueryAsync<CRMBlazorServerRBS.Models.RadzenCRM.TaskType>(
+                "SELECT * FROM [dbo].[TaskTypes]");
+            var items = types.AsQueryable();
 
             if (query != null)
             {
-                if (!string.IsNullOrEmpty(query.Expand))
-                {
-                    var propertiesToExpand = query.Expand.Split(',');
-                    foreach(var p in propertiesToExpand)
-                    {
-                        items = items.Include(p.Trim());
-                    }
-                }
-
                 if (!string.IsNullOrEmpty(query.Filter))
                 {
-                    if (query.FilterParameters != null)
-                    {
-                        items = items.Where(query.Filter, query.FilterParameters);
-                    }
-                    else
-                    {
-                        items = items.Where(query.Filter);
-                    }
+                    items = query.FilterParameters != null
+                        ? items.Where(query.Filter, query.FilterParameters)
+                        : items.Where(query.Filter);
                 }
 
                 if (!string.IsNullOrEmpty(query.OrderBy))
-                {
                     items = items.OrderBy(query.OrderBy);
-                }
 
                 if (query.Skip.HasValue)
-                {
                     items = items.Skip(query.Skip.Value);
-                }
 
                 if (query.Top.HasValue)
-                {
                     items = items.Take(query.Top.Value);
-                }
             }
 
             OnTaskTypesRead(ref items);
@@ -1044,16 +752,12 @@ namespace CRMBlazorServerRBS
 
         public async Task<CRMBlazorServerRBS.Models.RadzenCRM.TaskType> GetTaskTypeById(int id)
         {
-            var items = Context.TaskTypes
-                              .AsNoTracking()
-                              .Where(i => i.Id == id);
+            var item = await db.QueryFirstOrDefaultAsync<CRMBlazorServerRBS.Models.RadzenCRM.TaskType>(
+                "SELECT * FROM [dbo].[TaskTypes] WHERE [Id] = @Id", new { Id = id });
 
-  
-            var itemToReturn = items.FirstOrDefault();
+            OnTaskTypeGet(item);
 
-            OnTaskTypeGet(itemToReturn);
-
-            return await Task.FromResult(itemToReturn);
+            return item;
         }
 
         partial void OnTaskTypeCreated(CRMBlazorServerRBS.Models.RadzenCRM.TaskType item);
@@ -1063,25 +767,15 @@ namespace CRMBlazorServerRBS
         {
             OnTaskTypeCreated(tasktype);
 
-            var existingItem = Context.TaskTypes
-                              .Where(i => i.Id == tasktype.Id)
-                              .FirstOrDefault();
+            var existing = await db.QueryFirstOrDefaultAsync<int?>(
+                "SELECT [Id] FROM [dbo].[TaskTypes] WHERE [Id] = @Id", new { tasktype.Id });
 
-            if (existingItem != null)
-            {
-               throw new Exception("Item already available");
-            }            
+            if (existing != null)
+                throw new Exception("Item already available");
 
-            try
-            {
-                Context.TaskTypes.Add(tasktype);
-                Context.SaveChanges();
-            }
-            catch
-            {
-                Context.Entry(tasktype).State = EntityState.Detached;
-                throw;
-            }
+            tasktype.Id = await db.QuerySingleAsync<int>(
+                @"INSERT INTO [dbo].[TaskTypes] ([Name]) VALUES (@Name);
+                  SELECT CAST(SCOPE_IDENTITY() AS INT);", tasktype);
 
             OnAfterTaskTypeCreated(tasktype);
 
@@ -1090,14 +784,7 @@ namespace CRMBlazorServerRBS
 
         public async Task<CRMBlazorServerRBS.Models.RadzenCRM.TaskType> CancelTaskTypeChanges(CRMBlazorServerRBS.Models.RadzenCRM.TaskType item)
         {
-            var entityToCancel = Context.Entry(item);
-            if (entityToCancel.State == EntityState.Modified)
-            {
-              entityToCancel.CurrentValues.SetValues(entityToCancel.OriginalValues);
-              entityToCancel.State = EntityState.Unchanged;
-            }
-
-            return item;
+            return await GetTaskTypeById(item.Id);
         }
 
         partial void OnTaskTypeUpdated(CRMBlazorServerRBS.Models.RadzenCRM.TaskType item);
@@ -1107,20 +794,11 @@ namespace CRMBlazorServerRBS
         {
             OnTaskTypeUpdated(tasktype);
 
-            var itemToUpdate = Context.TaskTypes
-                              .Where(i => i.Id == tasktype.Id)
-                              .FirstOrDefault();
+            var rows = await db.ExecuteAsync(
+                "UPDATE [dbo].[TaskTypes] SET [Name]=@Name WHERE [Id]=@Id", tasktype);
 
-            if (itemToUpdate == null)
-            {
-               throw new Exception("Item no longer available");
-            }
-                
-            var entryToUpdate = Context.Entry(itemToUpdate);
-            entryToUpdate.CurrentValues.SetValues(tasktype);
-            entryToUpdate.State = EntityState.Modified;
-
-            Context.SaveChanges();
+            if (rows == 0)
+                throw new Exception("Item no longer available");
 
             OnAfterTaskTypeUpdated(tasktype);
 
@@ -1132,119 +810,19 @@ namespace CRMBlazorServerRBS
 
         public async Task<CRMBlazorServerRBS.Models.RadzenCRM.TaskType> DeleteTaskType(int id)
         {
-            var itemToDelete = Context.TaskTypes
-                              .Where(i => i.Id == id)
-                              .Include(i => i.Tasks)
-                              .FirstOrDefault();
+            var item = await db.QueryFirstOrDefaultAsync<CRMBlazorServerRBS.Models.RadzenCRM.TaskType>(
+                "SELECT * FROM [dbo].[TaskTypes] WHERE [Id] = @Id", new { Id = id });
 
-            if (itemToDelete == null)
-            {
-               throw new Exception("Item no longer available");
-            }
+            if (item == null)
+                throw new Exception("Item no longer available");
 
-            OnTaskTypeDeleted(itemToDelete);
+            OnTaskTypeDeleted(item);
 
+            await db.ExecuteAsync("DELETE FROM [dbo].[TaskTypes] WHERE [Id] = @Id", new { Id = id });
 
-            Context.TaskTypes.Remove(itemToDelete);
+            OnAfterTaskTypeDeleted(item);
 
-            try
-            {
-                Context.SaveChanges();
-            }
-            catch
-            {
-                Context.Entry(itemToDelete).State = EntityState.Unchanged;
-                throw;
-            }
-
-            OnAfterTaskTypeDeleted(itemToDelete);
-
-            return itemToDelete;
+            return item;
         }
-
-        public async Task<PagedResult<CRMBlazorServerRBS.Models.RadzenCRM.Contact>> GetContactsPaged(Query query = null, 
-                                                                                                     string whereClause = "", 
-                                                                                                     DynamicParameters parameters = null)
-        {
-            
-           string  sqlText = "select a.*, count(*) over() cnt from Contacts a " +
-                              (string.IsNullOrWhiteSpace(whereClause) ? "" : $" where {whereClause} ") +
-                              " " +
-                             (string.IsNullOrEmpty(query?.OrderBy) ? " order by Id" : $" order by {query.OrderBy}") +
-                             (query?.Skip == null ? "" : $" OFFSET {query.Skip} ROWS") +
-                             (query?.Top == null ? "" : $" FETCH NEXT {query.Top} ROWS ONLY");
-
-
-
-
-            var lst = Context.Database.GetDbConnection().Query(sqlText, parameters);
-
-            var contactsList = lst?.Select(x => new Contact
-            {
-                Id = x.Id,
-                Email = x.Email,
-                Company = x.Company,
-                LastName = x.LastName,
-                FirstName = x.FirstName,
-                Phone = x.Phone
-            }).ToList();
-
-            return new PagedResult<Contact>
-            {
-                Items = contactsList,
-                Count = lst.FirstOrDefault()?.cnt ?? 0
-            };
-
-
-            
-
-            IQueryable<CRMBlazorServerRBS.Models.RadzenCRM.Contact> items =
-                Context.Contacts.AsNoTracking();
-
-            // EXPAND
-            if (!string.IsNullOrEmpty(query?.Expand))
-            {
-                foreach (var p in query.Expand.Split(','))
-                {
-                    items = items.Include(p.Trim());
-                }
-            }
-
-            // FILTER
-            if (!string.IsNullOrEmpty(query?.Filter))
-            {
-                items = query.FilterParameters != null
-                    ? items.Where(query.Filter, query.FilterParameters)
-                    : items.Where(query.Filter);
-            }
-
-            // TOTAL COUNT (до Skip/Take)
-            var count = await items.CountAsync();
-
-            // SORT
-            if (!string.IsNullOrEmpty(query?.OrderBy))
-            {
-                items = items.OrderBy(query.OrderBy);
-            }
-
-            // PAGING
-            if (query?.Skip != null)
-            {
-                items = items.Skip(query.Skip.Value);
-            }
-
-            if (query?.Top != null)
-            {
-                items = items.Take(query.Top.Value);
-            }
-
-            return new PagedResult<CRMBlazorServerRBS.Models.RadzenCRM.Contact>
-            {
-                Items = await items.ToListAsync(),
-                Count = count
-            };
-        
-        }
-
     }
 }

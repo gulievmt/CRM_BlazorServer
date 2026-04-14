@@ -1,25 +1,17 @@
 using System;
 using System.Linq;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.Threading.Tasks;
-
-using CRMBlazorServerRBS.Data;
-using Microsoft.Data.SqlClient;
 
 namespace CRMBlazorServerRBS.Controllers
 {
     public partial class ExportRadzenCRMController : ExportController
     {
-        private readonly RadzenCRMContext context;
         private readonly RadzenCRMService service;
-        private readonly SqlConnection dbConnection;
 
-        public ExportRadzenCRMController(RadzenCRMContext context, RadzenCRMService service, SqlConnection dbConnection)
+        public ExportRadzenCRMController(RadzenCRMService service)
         {
             this.service = service;
-            this.context = context;
-            this.dbConnection = dbConnection;
         }
 
         [HttpGet("/export/RadzenCRM/contacts/csv")]

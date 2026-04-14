@@ -1,13 +1,9 @@
 using System;
 using System.Data;
 using System.Linq;
-using System.Linq.Dynamic.Core;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Components;
-using Microsoft.Data.SqlClient;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using Radzen;
 
@@ -21,9 +17,8 @@ namespace CRMBlazorServerRBS
         IHttpContextAccessor httpContextAccessor;
         ApplicationIdentityDbContext identityDbContext;
 
-        public RadzenCRMService(RadzenCRMContext context, NavigationManager navigationManager, IHttpContextAccessor httpContextAccessor, 
-                                ApplicationIdentityDbContext identityDbContext, SqlConnection connection)
-          : this(context, navigationManager, connection)
+        public RadzenCRMService(IDbConnection db, NavigationManager navigationManager, IHttpContextAccessor httpContextAccessor, ApplicationIdentityDbContext identityDbContext)
+          : this(db, navigationManager)
         {
             this.httpContextAccessor = httpContextAccessor;
             this.identityDbContext = identityDbContext;
@@ -46,14 +41,11 @@ namespace CRMBlazorServerRBS
                 // Filter the opportunities by the current user's id
                 items = items.Where(item => item.UserId == userId);
             }
-
-            // Include the User
-            items = items.Include(item => item.User);
         }
 
         partial void OnTasksRead(ref IQueryable<CRMBlazorServerRBS.Models.RadzenCRM.Task> items)
         {
-            items = items.Include(item => item.Opportunity.User).Include(item => item.Opportunity.Contact);
+            // Opportunity, Opportunity.User and Opportunity.Contact are already loaded via Dapper
         }
     }
 }

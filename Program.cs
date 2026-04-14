@@ -1,7 +1,6 @@
 ﻿using CRMBlazorServerRBS.CustomCodes;
 using CRMBlazorServerRBS.Data;
 using CRMBlazorServerRBS.Models;
-using DocumentFormat.OpenXml.Office2016.Drawing.ChartDrawing;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -27,13 +26,6 @@ builder.Services.AddScoped<TooltipService>();
 builder.Services.AddScoped<ContextMenuService>();
 builder.Services.AddScoped<CRMBlazorServerRBS.RadzenCRMService>();
 
-builder.Services.AddDbContext<CRMBlazorServerRBS.Data.RadzenCRMContext>(options =>
-{
-    options.UseSqlServer(builder.Configuration.GetConnectionString("RadzenCRMConnection"));
-});
-
-
-
 builder.Services.AddDbContext<CRMBlazorServerRBS.Data.ApplicationIdentityDbContext>(options =>
 {
     options.UseSqlServer(builder.Configuration.GetConnectionString("RadzenCRMConnection"));
@@ -53,12 +45,8 @@ builder.Services.AddDbContext<ApplicationIdentityDbContext>(options =>
 builder.Services.AddIdentity<ApplicationUser, ApplicationRole>().AddEntityFrameworkStores<ApplicationIdentityDbContext>().AddDefaultTokenProviders();
 
 
-// Регистрация SqlConnection как Transient
-builder.Services.AddTransient<SqlConnection>(sp =>
-{
-    var connectionString = builder.Configuration.GetConnectionString("RadzenCRMConnection");
-    return new SqlConnection(connectionString);
-});
+builder.Services.AddScoped<IDbConnection>(sp =>
+    new SqlConnection(builder.Configuration.GetConnectionString("RadzenCRMConnection")));
 
 builder.Services.AddSession();
 builder.Services.AddHttpContextAccessor();
