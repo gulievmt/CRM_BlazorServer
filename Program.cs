@@ -1,4 +1,4 @@
-using CRMBlazorServerRBS.CustomCodes;
+﻿using CRMBlazorServerRBS.CustomCodes;
 using CRMBlazorServerRBS.Data;
 using CRMBlazorServerRBS.Models;
 using DocumentFormat.OpenXml.Office2016.Drawing.ChartDrawing;
@@ -26,13 +26,13 @@ builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<TooltipService>();
 builder.Services.AddScoped<ContextMenuService>();
 builder.Services.AddScoped<CRMBlazorServerRBS.RadzenCRMService>();
+
 builder.Services.AddDbContext<CRMBlazorServerRBS.Data.RadzenCRMContext>(options =>
 {
     options.UseSqlServer(builder.Configuration.GetConnectionString("RadzenCRMConnection"));
 });
 
-builder.Services.AddScoped<IDbConnection>(sp =>
-    new SqlConnection(builder.Configuration.GetConnectionString("RadzenCRMConnection")));
+
 
 builder.Services.AddDbContext<CRMBlazorServerRBS.Data.ApplicationIdentityDbContext>(options =>
 {
@@ -53,13 +53,27 @@ builder.Services.AddDbContext<ApplicationIdentityDbContext>(options =>
 builder.Services.AddIdentity<ApplicationUser, ApplicationRole>().AddEntityFrameworkStores<ApplicationIdentityDbContext>().AddDefaultTokenProviders();
 
 
+// Регистрация SqlConnection как Transient
+builder.Services.AddTransient<SqlConnection>(sp =>
+{
+    var connectionString = builder.Configuration.GetConnectionString("RadzenCRMConnection");
+    return new SqlConnection(connectionString);
+});
 
 builder.Services.AddSession();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IRequestInfoProvider, RequestInfoProvider>(); // Scoped for Session!!!
 //builder.Services.AddControllers();
 
+
 builder.Services.AddScoped<AuthenticationStateProvider, CRMBlazorServerRBS.ApplicationAuthenticationStateProvider>();
+
+builder.Services.AddScoped<UserContext>();
+
+builder.Services.AddScoped<AppCircuitHandler>();
+builder.Services.AddScoped<AuditService>();
+
+
 var app = builder.Build();
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
@@ -69,7 +83,7 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseHeaderPropagation();
 app.UseRouting();
@@ -80,5 +94,5 @@ app.MapControllers();
 app.MapBlazorHub();
 app.UseMiddleware<MyCustomMiddleware>();
 app.MapFallbackToPage("/_Host");
-app.Services.CreateScope().ServiceProvider.GetRequiredService<ApplicationIdentityDbContext>().Database.Migrate();
+//app.Services.CreateScope().ServiceProvider.GetRequiredService<ApplicationIdentityDbContext>().Database.Migrate();
 app.Run();

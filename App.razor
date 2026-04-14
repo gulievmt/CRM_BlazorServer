@@ -1,16 +1,26 @@
-@inject CRMBlazorServerRBS.CustomCodes.IRequestInfoProvider RequestInfoProvider;
+﻿
 
 
 <CascadingAuthenticationState>
 <Router AppAssembly="@typeof(App).Assembly">
     <Found Context="routeData">
-            <h1> @RequestInfoProvider.GetClientIp()</h1>
+            <AuthorizeView>
+                <Authorized>
+                    <!-- context: AuthenticationState -->
+                    <h1 style="color:red"> Привет, @context.User.Identity.Name!</h1>
+                </Authorized>
+            </AuthorizeView>
+            <h1> @RequestInfoProvider123.GetClientIp()</h1>
         <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
             <NotAuthorized>
                 <RedirectToLogin IsAuthenticated="@context.User.Identity.IsAuthenticated" />
             </NotAuthorized>
             <Authorizing></Authorizing>
+
+
         </AuthorizeRouteView>
+
+
     </Found>
     <NotFound>
         <PageTitle>Not found</PageTitle>

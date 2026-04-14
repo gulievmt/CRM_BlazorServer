@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Radzen;
 using Radzen.Blazor;
+using System.Data.SqlClient;
 
 namespace CRMBlazorServerRBS.Pages
 {
@@ -47,7 +48,7 @@ namespace CRMBlazorServerRBS.Pages
             try
             {
                 await RadzenCRMService.CreateContact(contact);
-                DialogService.Close(contact);
+                DialogService.Close(true);
             }
             catch (Exception ex)
             {
@@ -57,7 +58,7 @@ namespace CRMBlazorServerRBS.Pages
 
         protected async Task CancelButtonClick(MouseEventArgs args)
         {
-            DialogService.Close(null);
+            DialogService.Close(false);
         }
     }
 }

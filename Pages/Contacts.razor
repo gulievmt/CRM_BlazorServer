@@ -22,7 +22,9 @@
     <RadzenRow>
       <RadzenColumn SizeMD=12>
         <RadzenDataGrid @ref="grid0" ColumnWidth="200px"  AllowFiltering="true" FilterMode="FilterMode.Advanced" AllowPaging="true" AllowSorting="true" ShowPagingSummary="true" PageSizeOptions=@(new int[]{5, 10, 20, 30})
-            Data="@contacts"    TItem="CRMBlazorServerRBS.Models.RadzenCRM.Contact" RowSelect="@EditRow" >
+            Data="@contacts"             
+            LoadData="@LoadData" Count="@count"
+                            TItem="CRMBlazorServerRBS.Models.RadzenCRM.Contact" RowSelect="@EditRow" >
             <Columns>
                 <RadzenDataGridColumn TItem="CRMBlazorServerRBS.Models.RadzenCRM.Contact" Property="Email" Title="Email">
                 </RadzenDataGridColumn>

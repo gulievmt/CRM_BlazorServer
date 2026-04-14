@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using System.Threading.Tasks;
 
 using CRMBlazorServerRBS.Data;
-using System.Data;
+using Microsoft.Data.SqlClient;
 
 namespace CRMBlazorServerRBS.Controllers
 {
@@ -13,13 +13,13 @@ namespace CRMBlazorServerRBS.Controllers
     {
         private readonly RadzenCRMContext context;
         private readonly RadzenCRMService service;
-        private readonly IDbConnection dbConnection;
+        private readonly SqlConnection dbConnection;
 
-        public ExportRadzenCRMController(RadzenCRMContext context, RadzenCRMService service, IDbConnection dbConnection)
+        public ExportRadzenCRMController(RadzenCRMContext context, RadzenCRMService service, SqlConnection dbConnection)
         {
             this.service = service;
             this.context = context;
-            this.dbConnection = context.Database.GetDbConnection();
+            this.dbConnection = dbConnection;
         }
 
         [HttpGet("/export/RadzenCRM/contacts/csv")]

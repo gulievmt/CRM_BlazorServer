@@ -1,20 +1,23 @@
-using System;
-using System.Web;
-using System.Linq;
-using System.Collections.Generic;
-using System.Net.Http;
-using System.Threading.Tasks;
-using System.Text;
-using System.Text.Json;
-using System.Security.Claims;
-using Microsoft.AspNetCore.Identity;
+using CRMBlazorServerRBS.Data;
+using CRMBlazorServerRBS.Models;
+using Dapper;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
-
+using Microsoft.AspNetCore.Identity;
 using Radzen;
-
-using CRMBlazorServerRBS.Models;
-using CRMBlazorServerRBS.Data;
+using Radzen.Blazor;
+using System;
+using System.Collections.Generic;
+using Microsoft.Data.SqlClient;
+using System.Linq;
+using System.Net.Http;
+using System.Security.Claims;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
+using System.Web;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 
 namespace CRMBlazorServerRBS
 {
@@ -33,13 +36,28 @@ namespace CRMBlazorServerRBS
 
         public ClaimsPrincipal Principal { get; private set; }
 
-        public SecurityService(ApplicationIdentityDbContext securitContext,   NavigationManager navigationManager, IHttpClientFactory factory)
+        private readonly string connectionString;
+        private readonly SqlConnection _connection;
+
+
+        public SecurityService(ApplicationIdentityDbContext securitContext,   NavigationManager navigationManager, 
+                               IHttpClientFactory factory, SqlConnection connection)
         {
             this.securitDbContext = securitContext;
             this.baseUri = new Uri($"{navigationManager.BaseUri}odata/Identity/");
             this.httpClient = factory.CreateClient("CRMBlazorServerRBS");
             this.navigationManager = navigationManager;
+            this._connection = connection;
+            this._connection.Open();
         }
+
+        // Use a short-lived connection in GetRoles
+        public async Task<IEnumerable<ApplicationRole>> GetRoles()
+        {
+            var roles = await _connection.QueryAsync<ApplicationRole>("SELECT Id, Name FROM [RadzenCRM].[dbo].[AspNetRoles]");
+            return roles.ToList();
+        }
+
 
         public bool IsInRole(params string[] roles)
         {
@@ -114,19 +132,9 @@ namespace CRMBlazorServerRBS
             navigationManager.NavigateTo("Login", true);
         }
 
-        public async Task<IEnumerable<ApplicationRole>> GetRoles()
-        {
-            var uri = new Uri(baseUri, $"ApplicationRoles");
+       
 
-            uri = uri.GetODataUri();
-
-            var response = await httpClient.GetAsync(uri);
-
-            var result = await response.ReadAsync<ODataServiceResult<ApplicationRole>>();
-
-            return result.Value;
-        }
-
+   
         public async Task<ApplicationRole> CreateRole(ApplicationRole role)
         {
             var uri = new Uri(baseUri, $"ApplicationRoles");
@@ -147,8 +155,14 @@ namespace CRMBlazorServerRBS
 
         public async Task<IEnumerable<ApplicationUser>> GetUsers()
         {
+            var roles = await _connection.QueryAsync<ApplicationUser>("SELECT * FROM [RadzenCRM].[dbo].[AspNetUsers]");
+            return roles.ToList();
+
+
+
             var uri = new Uri(baseUri, $"ApplicationUsers");
 
+            
 
             uri = uri.GetODataUri();
 
@@ -157,6 +171,33 @@ namespace CRMBlazorServerRBS
             var result = await response.ReadAsync<ODataServiceResult<ApplicationUser>>();
 
             return result.Value;
+            /*
+SELECT TOP (1000) [Id]
+      ,[AccessFailedCount]
+      ,[ConcurrencyStamp]
+      ,[Email]
+      ,[EmailConfirmed]
+      ,[LockoutEnabled]
+      ,[LockoutEnd]
+      ,[NormalizedEmail]
+      ,[NormalizedUserName]
+      ,[PasswordHash]
+      ,[PhoneNumber]
+      ,[PhoneNumberConfirmed]
+      ,[SecurityStamp]
+      ,[TwoFactorEnabled]
+      ,[UserName]
+      ,[FirstName]
+      ,[LastName]
+      ,[Picture]
+  FROM [RadzenCRM].[dbo].[AspNetUsers]             
+             
+             
+             
+             */
+
+
+
         }
 
         public async Task<ApplicationUser> CreateUser(ApplicationUser user)
@@ -172,9 +213,13 @@ namespace CRMBlazorServerRBS
 
         public async Task<HttpResponseMessage> DeleteUser(string id)
         {
-            var uri = new Uri(baseUri, $"ApplicationUsers('{id}')");
 
-            return await httpClient.DeleteAsync(uri);
+            string sql = "DELETE FROM [RadzenCRM].[dbo].[AspNetUsers] WHERE Id = @Id";
+
+            int rowsAffected = await _connection.ExecuteAsync(sql, new { Id = id });
+
+            return new HttpResponseMessage() { StatusCode =  System.Net.HttpStatusCode.OK };
+
         }
 
         public async Task<ApplicationUser> GetUserById(string id)

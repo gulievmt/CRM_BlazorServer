@@ -21,8 +21,9 @@ namespace CRMBlazorServerRBS
         IHttpContextAccessor httpContextAccessor;
         ApplicationIdentityDbContext identityDbContext;
 
-        public RadzenCRMService(RadzenCRMContext context, NavigationManager navigationManager, IHttpContextAccessor httpContextAccessor, ApplicationIdentityDbContext identityDbContext)
-          : this(context, navigationManager)
+        public RadzenCRMService(RadzenCRMContext context, NavigationManager navigationManager, IHttpContextAccessor httpContextAccessor, 
+                                ApplicationIdentityDbContext identityDbContext, SqlConnection connection)
+          : this(context, navigationManager, connection)
         {
             this.httpContextAccessor = httpContextAccessor;
             this.identityDbContext = identityDbContext;

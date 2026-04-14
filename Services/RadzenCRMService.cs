@@ -1,21 +1,36 @@
-using System;
-using System.Data;
-using System.Linq;
-using System.Linq.Dynamic.Core;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using System.Text.Encodings.Web;
+﻿using CRMBlazorServerRBS.Data;
+using CRMBlazorServerRBS.Models.RadzenCRM;
+using Dapper;
+using DataHelper;
+using DocumentFormat.OpenXml.InkML;
+using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Radzen;
-
-using CRMBlazorServerRBS.Data;
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Linq;
+using System.Linq.Dynamic.Core;
+using System.Text.Encodings.Web;
+using System.Threading.Tasks;
+using Query = Radzen.Query;
+using Task = System.Threading.Tasks.Task;
 
 namespace CRMBlazorServerRBS
 {
+    public class PagedResult<T>
+    {
+        public IEnumerable<T> Items { get; set; }
+        public int Count { get; set; }
+    }
+    
+
+
     public partial class RadzenCRMService
     {
+        
         RadzenCRMContext Context
         {
            get
@@ -27,10 +42,15 @@ namespace CRMBlazorServerRBS
         private readonly RadzenCRMContext context;
         private readonly NavigationManager navigationManager;
 
-        public RadzenCRMService(RadzenCRMContext context, NavigationManager navigationManager)
+        private readonly SqlConnection connection;
+
+
+
+        public RadzenCRMService(RadzenCRMContext context, NavigationManager navigationManager, SqlConnection connection)
         {
             this.context = context;
             this.navigationManager = navigationManager;
+            this.connection = connection;
         }
 
         public void Reset() => Context.ChangeTracker.Entries().Where(e => e.Entity != null).ToList().ForEach(e => e.State = EntityState.Detached);
@@ -38,7 +58,8 @@ namespace CRMBlazorServerRBS
 
         public async Task ExportContactsToExcel(Query query = null, string fileName = null)
         {
-            navigationManager.NavigateTo(query != null ? query.ToUrl($"export/radzencrm/contacts/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/contacts/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')", true);
+            var Url = query != null ? query.ToUrl($"export/radzencrm/contacts/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/contacts/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')";
+            navigationManager.NavigateTo( Url, true);
         }
 
         public async Task ExportContactsToCSV(Query query = null, string fileName = null)
@@ -120,9 +141,7 @@ namespace CRMBlazorServerRBS
         {
             OnContactCreated(contact);
 
-            var existingItem = Context.Contacts
-                              .Where(i => i.Id == contact.Id)
-                              .FirstOrDefault();
+            var existingItem = connection.Query<Contact>("select * from contacts where id = @id", new { id = contact.Id });
 
             if (existingItem != null)
             {
@@ -1142,5 +1161,90 @@ namespace CRMBlazorServerRBS
 
             return itemToDelete;
         }
+
+        public async Task<PagedResult<CRMBlazorServerRBS.Models.RadzenCRM.Contact>> GetContactsPaged(Query query = null, 
+                                                                                                     string whereClause = "", 
+                                                                                                     DynamicParameters parameters = null)
+        {
+            
+           string  sqlText = "select a.*, count(*) over() cnt from Contacts a " +
+                              (string.IsNullOrWhiteSpace(whereClause) ? "" : $" where {whereClause} ") +
+                              " " +
+                             (string.IsNullOrEmpty(query?.OrderBy) ? " order by Id" : $" order by {query.OrderBy}") +
+                             (query?.Skip == null ? "" : $" OFFSET {query.Skip} ROWS") +
+                             (query?.Top == null ? "" : $" FETCH NEXT {query.Top} ROWS ONLY");
+
+
+
+
+            var lst = Context.Database.GetDbConnection().Query(sqlText, parameters);
+
+            var contactsList = lst?.Select(x => new Contact
+            {
+                Id = x.Id,
+                Email = x.Email,
+                Company = x.Company,
+                LastName = x.LastName,
+                FirstName = x.FirstName,
+                Phone = x.Phone
+            }).ToList();
+
+            return new PagedResult<Contact>
+            {
+                Items = contactsList,
+                Count = lst.FirstOrDefault()?.cnt ?? 0
+            };
+
+
+            
+
+            IQueryable<CRMBlazorServerRBS.Models.RadzenCRM.Contact> items =
+                Context.Contacts.AsNoTracking();
+
+            // EXPAND
+            if (!string.IsNullOrEmpty(query?.Expand))
+            {
+                foreach (var p in query.Expand.Split(','))
+                {
+                    items = items.Include(p.Trim());
+                }
+            }
+
+            // FILTER
+            if (!string.IsNullOrEmpty(query?.Filter))
+            {
+                items = query.FilterParameters != null
+                    ? items.Where(query.Filter, query.FilterParameters)
+                    : items.Where(query.Filter);
+            }
+
+            // TOTAL COUNT (до Skip/Take)
+            var count = await items.CountAsync();
+
+            // SORT
+            if (!string.IsNullOrEmpty(query?.OrderBy))
+            {
+                items = items.OrderBy(query.OrderBy);
+            }
+
+            // PAGING
+            if (query?.Skip != null)
+            {
+                items = items.Skip(query.Skip.Value);
+            }
+
+            if (query?.Top != null)
+            {
+                items = items.Take(query.Top.Value);
+            }
+
+            return new PagedResult<CRMBlazorServerRBS.Models.RadzenCRM.Contact>
+            {
+                Items = await items.ToListAsync(),
+                Count = count
+            };
+        
         }
+
+    }
 }
