@@ -80,7 +80,14 @@ namespace CRMBlazorServerRBS.Pages
         {
             var result = await DialogService.OpenAsync<EditContact>("Edit Contact", new Dictionary<string, object> { { "Id", args.Id } });
             if (result != null)
+            {
                 await grid0.Reload();
+
+                // Восстанавливаем выборку строки после перезагрузки
+                var updatedItem = contacts?.FirstOrDefault(c => c.Id == args.Id);
+                if (updatedItem != null)
+                    await grid0.SelectRow(updatedItem);
+            }
         }
 
         protected async Task GridDeleteButtonClick(MouseEventArgs args, CRMBlazorServerRBS.Models.RadzenCRM.Contact contact)
