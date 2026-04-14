@@ -78,7 +78,9 @@ namespace CRMBlazorServerRBS.Pages
 
         protected async Task EditRow(CRMBlazorServerRBS.Models.RadzenCRM.Contact args)
         {
-            await DialogService.OpenAsync<EditContact>("Edit Contact", new Dictionary<string, object> { { "Id", args.Id } });
+            var result = await DialogService.OpenAsync<EditContact>("Edit Contact", new Dictionary<string, object> { { "Id", args.Id } });
+            if (result != null)
+                await grid0.Reload();
         }
 
         protected async Task GridDeleteButtonClick(MouseEventArgs args, CRMBlazorServerRBS.Models.RadzenCRM.Contact contact)
