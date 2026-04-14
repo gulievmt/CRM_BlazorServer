@@ -1,6 +1,7 @@
 ﻿using CRMBlazorServerRBS.CustomCodes;
 using CRMBlazorServerRBS.Data;
 using CRMBlazorServerRBS.Models;
+using Dapper;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -12,6 +13,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Radzen;
 using System.Data;
+
+// Позволяет Dapper сопоставлять колонки вида "row_version" со свойствами "RowVersion"
+DefaultTypeMap.MatchNamesWithUnderscores = true;
 
 var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
