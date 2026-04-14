@@ -8,7 +8,7 @@ using Radzen;
 using Radzen.Blazor;
 using System;
 using System.Collections.Generic;
-using Microsoft.Data.SqlClient;
+using System.Data;
 using System.Linq;
 using System.Net.Http;
 using System.Security.Claims;
@@ -37,11 +37,11 @@ namespace CRMBlazorServerRBS
         public ClaimsPrincipal Principal { get; private set; }
 
         private readonly string connectionString;
-        private readonly SqlConnection _connection;
+        private readonly IDbConnection _connection;
 
 
-        public SecurityService(ApplicationIdentityDbContext securitContext,   NavigationManager navigationManager, 
-                               IHttpClientFactory factory, SqlConnection connection)
+        public SecurityService(ApplicationIdentityDbContext securitContext,   NavigationManager navigationManager,
+                               IHttpClientFactory factory, IDbConnection connection)
         {
             this.securitDbContext = securitContext;
             this.baseUri = new Uri($"{navigationManager.BaseUri}odata/Identity/");
