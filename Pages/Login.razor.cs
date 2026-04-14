@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.JSInterop;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
+using Microsoft.Extensions.Configuration;
 using Radzen;
 using Radzen.Blazor;
 
@@ -30,11 +31,16 @@ namespace CRMBlazorServerRBS.Pages
         [Inject]
         protected NotificationService NotificationService { get; set; }
 
+        [Inject]
+        protected IConfiguration Configuration { get; set; }
+
         protected string redirectUrl;
         protected string error;
         protected string info;
         protected bool errorVisible;
         protected bool infoVisible;
+
+        protected bool WindowsAuthEnabled { get; set; }
 
         [Inject]
         protected SecurityService Security { get; set; }
@@ -52,6 +58,17 @@ namespace CRMBlazorServerRBS.Pages
             errorVisible = !string.IsNullOrEmpty(error);
 
             infoVisible = !string.IsNullOrEmpty(info);
+
+            WindowsAuthEnabled = Configuration.GetValue<bool>("Authentication:Windows:Enabled");
+        }
+
+        protected void WindowsLoginClick()
+        {
+            // Полная перезагрузка страницы нужна, чтобы браузер мог выполнить
+            // HTTP-переговоры (Negotiate/Kerberos/NTLM) с сервером
+            NavigationManager.NavigateTo(
+                $"Account/WindowsLogin?redirectUrl={Uri.EscapeDataString(redirectUrl ?? "")}",
+                forceLoad: true);
         }
 
         string theForm = "document.forms[0]";

@@ -16,5 +16,17 @@
                 </ChildContent>
             </RadzenSplitButton>
         </RadzenTemplateForm>
+
+        @if (WindowsAuthEnabled)
+        {
+            <hr style="margin-top: 1.5rem;" />
+            <RadzenStack Orientation="Radzen.Orientation.Horizontal" AlignItems="Radzen.AlignItems.Center" Gap="0.5rem" style="margin-top: 1rem;">
+                <RadzenText Text="или" Style="color: var(--rz-text-secondary-color);" />
+                <RadzenButton Text="Войти через Windows" Icon="computer"
+                              ButtonStyle="ButtonStyle.Secondary"
+                              Variant="Variant.Outlined"
+                              Click="@WindowsLoginClick" />
+            </RadzenStack>
+        }
     </RadzenColumn>
 </RadzenRow>

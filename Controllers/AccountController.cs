@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using CRMBlazorServerRBS.Models;
+using System.Security.Principal;
 
 namespace CRMBlazorServerRBS.Controllers
 {
@@ -127,6 +128,41 @@ namespace CRMBlazorServerRBS.Controllers
             await signInManager.SignOutAsync();
 
             return Redirect("~/");
+        }
+
+        /// <summary>
+        /// Windows-аутентификация (Negotiate/Kerberos/NTLM).
+        /// Атрибут [Authorize(AuthenticationSchemes = "Negotiate")] автоматически
+        /// вызывает браузерный диалог Windows, если пользователь ещё не аутентифицирован.
+        /// После успешной Windows-аутентификации находим соответствующего Identity-пользователя
+        /// и выдаём стандартный Identity cookie.
+        /// </summary>
+        [HttpGet]
+        [Authorize(AuthenticationSchemes = "Negotiate")]
+        public async Task<IActionResult> WindowsLogin(string redirectUrl)
+        {
+            var windowsUsername = User.Identity?.Name; // формат: DOMAIN\username
+
+            if (string.IsNullOrEmpty(windowsUsername))
+                return RedirectWithError("Не удалось получить имя Windows-пользователя", redirectUrl);
+
+            // Ищем пользователя сначала по полному имени (DOMAIN\user), потом по короткому (user)
+            var shortName = windowsUsername.Contains('\\')
+                ? windowsUsername.Split('\\')[1]
+                : windowsUsername;
+
+            var user = await userManager.FindByNameAsync(windowsUsername)
+                    ?? await userManager.FindByNameAsync(shortName);
+
+            if (user == null)
+                return RedirectWithError(
+                    $"Windows-пользователь '{shortName}' не найден в системе. Обратитесь к администратору.",
+                    redirectUrl);
+
+            // Выдаём Identity cookie — дальше приложение работает как обычно
+            await signInManager.SignInAsync(user, isPersistent: false);
+
+            return Redirect($"~/{redirectUrl}");
         }
     }
 }

@@ -34,7 +34,8 @@ builder.Services.AddDbContext<CRMBlazorServerRBS.Data.ApplicationIdentityDbConte
 
 builder.Services.AddHttpClient("CRMBlazorServerRBS").AddHeaderPropagation(o => o.Headers.Add("Cookie"));
 builder.Services.AddHeaderPropagation(o => o.Headers.Add("Cookie"));
-builder.Services.AddAuthentication();
+builder.Services.AddAuthentication()
+    .AddNegotiate();          // Windows (Kerberos/NTLM) — дополнительная схема
 builder.Services.AddAuthorization();
 builder.Services.AddScoped<CRMBlazorServerRBS.SecurityService>();
 builder.Services.AddDbContext<ApplicationIdentityDbContext>(options =>

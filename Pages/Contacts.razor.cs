@@ -76,17 +76,28 @@ namespace CRMBlazorServerRBS.Pages
             Audit.Log("AddButtonClick", "");
         }
 
+        private bool isInEditRow = false;
         protected async Task EditRow(CRMBlazorServerRBS.Models.RadzenCRM.Contact args)
         {
-            var result = await DialogService.OpenAsync<EditContact>("Edit Contact", new Dictionary<string, object> { { "Id", args.Id } });
-            if (result != null)
+            if(isInEditRow) return; 
+            
+            try
             {
-                await grid0.Reload();
+                isInEditRow = true;
+                var result = await DialogService.OpenAsync<EditContact>("Edit Contact", new Dictionary<string, object> { { "Id", args.Id } });
+                if (result != null)
+                {
+                    await grid0.Reload();
 
-                // Восстанавливаем выборку строки после перезагрузки
-                var updatedItem = contacts?.FirstOrDefault(c => c.Id == args.Id);
-                if (updatedItem != null)
-                    await grid0.SelectRow(updatedItem);
+                    // Восстанавливаем выборку строки после перезагрузки
+                    var updatedItem = contacts?.FirstOrDefault(c => c.Id == args.Id);
+                    if (updatedItem != null)
+                        await grid0.SelectRow(updatedItem);
+                }
+            }
+            finally
+            {
+                isInEditRow = false;
             }
         }
 
