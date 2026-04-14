@@ -23,6 +23,13 @@ namespace CRMBlazorServerRBS.Models.RadzenCRM
 
         public string Phone { get; set; }
 
+        /// <summary>
+        /// SQL Server rowversion — автоматически обновляется при каждом изменении строки.
+        /// Используется для оптимистичной блокировки (Optimistic Concurrency).
+        /// </summary>
+        [Column("row_version")]
+        public byte[] RowVersion { get; set; }
+
         public ICollection<Opportunity> Opportunities { get; set; }
 
     }

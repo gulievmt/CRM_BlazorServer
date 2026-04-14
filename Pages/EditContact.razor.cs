@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.JSInterop;
@@ -40,6 +41,7 @@ namespace CRMBlazorServerRBS.Pages
             contact = await RadzenCRMService.GetContactById(Id);
         }
         protected bool errorVisible;
+        protected bool concurrencyErrorVisible;
         protected CRMBlazorServerRBS.Models.RadzenCRM.Contact contact;
 
         [Inject]
@@ -49,13 +51,30 @@ namespace CRMBlazorServerRBS.Pages
         {
             try
             {
+                errorVisible = false;
+                concurrencyErrorVisible = false;
+
                 await RadzenCRMService.UpdateContact(Id, contact);
                 DialogService.Close(contact);
             }
-            catch (Exception ex)
+            catch (DBConcurrencyException)
+            {
+                // Запись изменена другим пользователем — предлагаем обновить данные
+                concurrencyErrorVisible = true;
+            }
+            catch (Exception)
             {
                 errorVisible = true;
             }
+        }
+
+        /// <summary>
+        /// Перечитать актуальные данные из БД и сбросить ошибку конкурентности.
+        /// </summary>
+        protected async Task RefreshContact()
+        {
+            contact = await RadzenCRMService.GetContactById(Id);
+            concurrencyErrorVisible = false;
         }
 
         protected async Task CancelButtonClick(MouseEventArgs args)

@@ -1,5 +1,6 @@
 using System;
 using System.Data;
+using System.Data.Common;
 using System.Linq;
 using System.Linq.Dynamic.Core;
 using System.Collections.Generic;
@@ -141,14 +142,41 @@ namespace CRMBlazorServerRBS
         {
             OnContactUpdated(contact);
 
-            var rows = await db.ExecuteAsync(
-                @"UPDATE [dbo].[Contacts] SET
-                    [Email]=@Email,[Company]=@Company,[LastName]=@LastName,
-                    [FirstName]=@FirstName,[Phone]=@Phone
-                  WHERE [Id]=@Id", contact);
+            // Если RowVersion передан — проверяем оптимистичную блокировку
+            int rows;
+            if (contact.RowVersion != null)
+            {
+                rows = await db.ExecuteAsync(
+                    @"UPDATE [dbo].[Contacts] SET
+                        [Email]=@Email,[Company]=@Company,[LastName]=@LastName,
+                        [FirstName]=@FirstName,[Phone]=@Phone
+                      WHERE [Id]=@Id AND [row_version]=@RowVersion", contact);
+            }
+            else
+            {
+                rows = await db.ExecuteAsync(
+                    @"UPDATE [dbo].[Contacts] SET
+                        [Email]=@Email,[Company]=@Company,[LastName]=@LastName,
+                        [FirstName]=@FirstName,[Phone]=@Phone
+                      WHERE [Id]=@Id", contact);
+            }
 
             if (rows == 0)
-                throw new Exception("Item no longer available");
+            {
+                // Определяем причину: запись удалена или изменена другим пользователем
+                var currentVersion = await db.QueryFirstOrDefaultAsync<byte[]>(
+                    "SELECT [row_version] FROM [dbo].[Contacts] WHERE [Id]=@Id", new { Id = id });
+
+                if (currentVersion == null)
+                    throw new Exception("Запись больше не существует.");
+
+                throw new DBConcurrencyException(
+                    "Запись была изменена другим пользователем. Обновите данные и попробуйте снова.");
+            }
+
+            // Обновляем RowVersion в объекте — он изменился после UPDATE
+            contact.RowVersion = await db.QuerySingleAsync<byte[]>(
+                "SELECT [row_version] FROM [dbo].[Contacts] WHERE [Id]=@Id", new { Id = id });
 
             OnAfterContactUpdated(contact);
 

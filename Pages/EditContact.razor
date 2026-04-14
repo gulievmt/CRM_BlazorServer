@@ -1,10 +1,14 @@
-@page "/edit-contact"
+@page "/edit-contact"
 @attribute [Authorize]
 
 <PageTitle>Edit Contact</PageTitle>
 
     <RadzenColumn SizeMD=12>
         <RadzenAlert Shade="Shade.Lighter" Variant="Variant.Flat" Size="AlertSize.Small" AlertStyle="AlertStyle.Danger" Visible="@errorVisible">Cannot save Contact</RadzenAlert>
+        <RadzenAlert Shade="Shade.Lighter" Variant="Variant.Flat" Size="AlertSize.Small" AlertStyle="AlertStyle.Warning" Visible="@concurrencyErrorVisible">
+            Запись была изменена другим пользователем.
+            <RadzenButton Text="Обновить данные" ButtonStyle="ButtonStyle.Warning" Variant="Variant.Text" Size="ButtonSize.Small" Click="@RefreshContact" />
+        </RadzenAlert>
         <RadzenTemplateForm TItem="CRMBlazorServerRBS.Models.RadzenCRM.Contact" Data="@contact" Visible="@(contact != null)" Submit="@FormSubmit">
           <RadzenStack>
             <RadzenFormField Text="Email" Variant="Variant.Filled">
