@@ -36,14 +36,15 @@ namespace CRMBlazorServerRBS.Controllers
 
         private IActionResult RedirectWithError(string error, string redirectUrl = null)
         {
-             if (!string.IsNullOrEmpty(redirectUrl))
-             {
-                 return Redirect($"~/Login?error={error}&redirectUrl={Uri.EscapeDataString(redirectUrl)}");
-             }
-             else
-             {
-                 return Redirect($"~/Login?error={error}");
-             }
+            var encodedError = Uri.EscapeDataString(error ?? "");
+            if (!string.IsNullOrEmpty(redirectUrl))
+            {
+                return Redirect($"~/Login?error={encodedError}&redirectUrl={Uri.EscapeDataString(redirectUrl)}");
+            }
+            else
+            {
+                return Redirect($"~/Login?error={encodedError}");
+            }
         }
 
         [HttpGet]
