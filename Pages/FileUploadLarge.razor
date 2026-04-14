@@ -1,0 +1,85 @@
+@page "/file-upload"
+@attribute [Authorize]
+
+<PageTitle>Загрузка файла</PageTitle>
+
+@* Hidden native file input — XHR reads it directly, bypassing SignalR *@
+<input type="file" id="largeFileInput" style="display:none" />
+
+<RadzenStack Gap="1.5rem" Style="max-width:640px; margin:2rem auto; padding:0 1rem;">
+
+    <RadzenText TextStyle="TextStyle.H5" TagName="TagName.H1">Загрузка большого файла</RadzenText>
+    <RadzenText TextStyle="TextStyle.Body2" style="color:var(--rz-text-secondary-color)">
+        Файл загружается напрямую через HTTP, минуя ограничение SignalR (10 МБ).
+        Максимальный размер ограничен только дисковым пространством сервера.
+    </RadzenText>
+
+    @* File picker *@
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.75rem">
+        <RadzenButton Text="Выбрать файл" Icon="attach_file"
+                      ButtonStyle="ButtonStyle.Secondary" Variant="Variant.Outlined"
+                      Click="@ChooseFile" Disabled="@isUploading" />
+
+        @if (selectedFileName != null)
+        {
+            <RadzenStack Gap="0">
+                <RadzenText Style="font-weight:500">@selectedFileName</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption" style="color:var(--rz-text-secondary-color)">
+                    @FormatSize(selectedFileSize)
+                </RadzenText>
+            </RadzenStack>
+        }
+        else
+        {
+            <RadzenText style="color:var(--rz-text-secondary-color)">Файл не выбран</RadzenText>
+        }
+    </RadzenStack>
+
+    @* Progress bar (shown during upload) *@
+    @if (isUploading)
+    {
+        <RadzenStack Gap="0.25rem">
+            <RadzenProgressBar Value="@uploadProgress" Max="100" ShowValue="true" />
+            <RadzenText TextStyle="TextStyle.Caption">Загружается... @uploadProgress%</RadzenText>
+        </RadzenStack>
+    }
+
+    @* Success result *@
+    @if (uploadedUrl != null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Success" Shade="Shade.Lighter" Variant="Variant.Flat" AllowClose="true" Close="@(() => uploadedUrl = null)">
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                <RadzenIcon Icon="check_circle" />
+                <RadzenStack Gap="0">
+                    <RadzenText>Файл успешно загружен</RadzenText>
+                    <a href="@uploadedUrl" target="_blank" style="word-break:break-all;">@uploadedOriginalName</a>
+                    <RadzenText TextStyle="TextStyle.Caption">@FormatSize(uploadedSize)</RadzenText>
+                </RadzenStack>
+            </RadzenStack>
+        </RadzenAlert>
+    }
+
+    @* Error *@
+    @if (errorMessage != null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Shade="Shade.Lighter" Variant="Variant.Flat" AllowClose="true" Close="@(() => errorMessage = null)">
+            @errorMessage
+        </RadzenAlert>
+    }
+
+    @* Action buttons *@
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+        <RadzenButton Text="Загрузить" Icon="upload"
+                      ButtonStyle="ButtonStyle.Primary" Variant="Variant.Flat"
+                      Disabled="@(selectedFileName == null || isUploading)"
+                      Click="@StartUpload" />
+
+        @if (isUploading)
+        {
+            <RadzenText style="align-self:center; color:var(--rz-text-secondary-color)">
+                Пожалуйста, подождите...
+            </RadzenText>
+        }
+    </RadzenStack>
+
+</RadzenStack>

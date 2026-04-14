@@ -18,6 +18,15 @@ using System.Data;
 DefaultTypeMap.MatchNamesWithUnderscores = true;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Allow large HTTP request bodies for the /upload/large endpoint.
+// [DisableRequestSizeLimit] on the action removes the per-action cap,
+// but Kestrel's server-wide limit must also be lifted (or set high enough).
+builder.WebHost.ConfigureKestrel(kestrel =>
+{
+    kestrel.Limits.MaxRequestBodySize = null; // null = unlimited; set a long value if you want a hard cap
+});
+
 // Add services to the container.
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor().AddHubOptions(o =>
@@ -56,7 +65,7 @@ builder.Services.AddScoped<IDbConnection>(sp =>
 builder.Services.AddSession();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IRequestInfoProvider, RequestInfoProvider>(); // Scoped for Session!!!
-//builder.Services.AddControllers();
+builder.Services.AddControllers();
 
 
 builder.Services.AddScoped<AuthenticationStateProvider, CRMBlazorServerRBS.ApplicationAuthenticationStateProvider>();
