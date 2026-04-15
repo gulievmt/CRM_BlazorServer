@@ -12,14 +12,31 @@
                         <RadzenTextBox Disabled="true" style="width: 100%" @bind-Value="@(user.UserName)" Name="UserName" />
                     </ChildContent>
                 </RadzenFormField>
-                <RadzenFormField Text="Тип пользователя" Variant="Variant.Filled">
-                    <ChildContent>
-                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.75rem">
-                            <RadzenCheckBox @bind-Value="@(user.IsWindowsUser)" Disabled="true" />
-                            <RadzenText>@(user.IsWindowsUser ? "Windows / Active Directory" : "Локальный")</RadzenText>
-                        </RadzenStack>
-                    </ChildContent>
-                </RadzenFormField>
+                <RadzenStack Gap="0.25rem">
+                    <RadzenText TextStyle="TextStyle.Caption" style="color:var(--rz-text-secondary-color); padding-left:2px;">Тип пользователя</RadzenText>
+                    @if (user.IsWindowsUser)
+                    {
+                        <div style="display:inline-flex; align-items:center; gap:8px;
+                                    background:var(--rz-primary-lighter); color:var(--rz-primary);
+                                    padding:8px 16px; border-radius:24px; width:fit-content;
+                                    font-size:0.875rem; font-weight:500;
+                                    border:1px solid var(--rz-primary-light);">
+                            <RadzenIcon Icon="computer" style="font-size:1.1rem;" />
+                            <span>Active Directory</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div style="display:inline-flex; align-items:center; gap:8px;
+                                    background:var(--rz-base-200); color:var(--rz-text-secondary-color);
+                                    padding:8px 16px; border-radius:24px; width:fit-content;
+                                    font-size:0.875rem; font-weight:500;
+                                    border:1px solid var(--rz-base-400);">
+                            <RadzenIcon Icon="person" style="font-size:1.1rem;" />
+                            <span>Локальный</span>
+                        </div>
+                    }
+                </RadzenStack>
                 <RadzenFormField Text="Email" Variant="Variant.Filled">
                     <ChildContent>
                         <RadzenTextBox style="width: 100%" @bind-Value="@(user.Email)" Name="Email" />

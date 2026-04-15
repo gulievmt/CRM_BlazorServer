@@ -26,6 +26,18 @@ namespace CRMBlazorServerRBS.Pages
         protected string error;
         protected bool errorVisible;
 
+        // Computed string value for RadzenSelectBar ("local" / "ad")
+        private string UserTypeValue
+        {
+            get => user?.IsWindowsUser == true ? "ad" : "local";
+            set
+            {
+                var isAd = value == "ad";
+                if (user != null) user.IsWindowsUser = isAd;
+                OnIsWindowsUserChanged(isAd);
+            }
+        }
+
         // AD autocomplete state
         private string adSearchText;
         private IEnumerable<SecurityService.AdUserInfo> adSuggestions = Enumerable.Empty<SecurityService.AdUserInfo>();
