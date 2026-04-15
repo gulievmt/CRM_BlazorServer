@@ -33,6 +33,8 @@ namespace CRMBlazorServerRBS.Models
             }
         }
 
+        public bool IsWindowsUser { get; set; }
+
         public ICollection<ApplicationRole> Roles { get; set; }
     }
 }

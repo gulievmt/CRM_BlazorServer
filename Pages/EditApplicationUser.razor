@@ -12,6 +12,14 @@
                         <RadzenTextBox Disabled="true" style="width: 100%" @bind-Value="@(user.UserName)" Name="UserName" />
                     </ChildContent>
                 </RadzenFormField>
+                <RadzenFormField Text="Тип пользователя" Variant="Variant.Filled">
+                    <ChildContent>
+                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.75rem">
+                            <RadzenCheckBox @bind-Value="@(user.IsWindowsUser)" Disabled="true" />
+                            <RadzenText>@(user.IsWindowsUser ? "Windows / Active Directory" : "Локальный")</RadzenText>
+                        </RadzenStack>
+                    </ChildContent>
+                </RadzenFormField>
                 <RadzenFormField Text="Email" Variant="Variant.Filled">
                     <ChildContent>
                         <RadzenTextBox style="width: 100%" @bind-Value="@(user.Email)" Name="Email" />
@@ -46,6 +54,8 @@
                         <RadzenDropDown Data="@roles" Multiple="true" style="width: 100%" TextProperty="Name" @bind-Value="@(userRoles)" ValueProperty="Id" Name="Roles" />
                     </ChildContent>
                 </RadzenFormField>
+                @if (!user.IsWindowsUser)
+                {
                 <RadzenFormField Text="Password" Variant="Variant.Filled">
                     <ChildContent>
                         <RadzenPassword @bind-Value="@(user.Password)" style="display: block; width: 100%" Name="Password" />
@@ -62,6 +72,7 @@
                         <RadzenCompareValidator Text="Passwords must match" Component="ConfirmPassword" Value="@user.Password" />
                     </Helper>
                 </RadzenFormField>
+                }
             </RadzenStack>
             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.End" Gap="0.5rem">
                     <RadzenButton ButtonType="ButtonType.Submit" Icon="save" Text="Save" Variant="Variant.Flat" />

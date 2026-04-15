@@ -1,3 +1,5 @@
+// SQL MIGRATION REQUIRED before running the app:
+// ALTER TABLE [dbo].[AspNetUsers] ADD [IsWindowsUser] BIT NOT NULL DEFAULT 0;
 using CRMBlazorServerRBS.Data;
 using CRMBlazorServerRBS.Models;
 using Dapper;
@@ -16,6 +18,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Web;
+using System.DirectoryServices;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -282,6 +285,48 @@ SELECT TOP (1000) [Id]
 
                 throw new ApplicationException(message);
             }
+        }
+
+        public record AdUserInfo(string SamAccountName, string DisplayName, string FirstName, string LastName, string Email)
+        {
+            public string DisplayText => string.IsNullOrEmpty(DisplayName)
+                ? SamAccountName
+                : $"{SamAccountName}  —  {DisplayName}";
+        }
+
+        public async Task<IEnumerable<AdUserInfo>> SearchAdUsers(string searchTerm)
+        {
+            if (string.IsNullOrWhiteSpace(searchTerm) || searchTerm.Length < 2)
+                return Enumerable.Empty<AdUserInfo>();
+
+            return await Task.Run(() =>
+            {
+                var results = new List<AdUserInfo>();
+                try
+                {
+                    using var entry = new DirectoryEntry("LDAP://fincaint.local");
+                    using var searcher = new DirectorySearcher(entry)
+                    {
+                        Filter = $"(&(objectClass=user)(objectCategory=person)" +
+                                 $"(!(userAccountControl:1.2.840.113556.1.4.803:=2))" +
+                                 $"(|(sAMAccountName={searchTerm}*)(displayName=*{searchTerm}*)(givenName={searchTerm}*)(sn={searchTerm}*)))",
+                        SizeLimit = 25
+                    };
+                    searcher.PropertiesToLoad.AddRange(new[] { "sAMAccountName", "displayName", "givenName", "sn", "mail" });
+
+                    foreach (SearchResult r in searcher.FindAll())
+                    {
+                        var sam = Prop(r, "sAMAccountName");
+                        if (string.IsNullOrEmpty(sam)) continue;
+                        results.Add(new AdUserInfo(sam, Prop(r, "displayName"), Prop(r, "givenName"), Prop(r, "sn"), Prop(r, "mail")));
+                    }
+                }
+                catch { /* AD not available — return empty */ }
+                return results.OrderBy(u => u.SamAccountName).ToList();
+            });
+
+            static string Prop(SearchResult r, string key) =>
+                r.Properties[key]?.Count > 0 ? r.Properties[key][0]?.ToString() ?? "" : "";
         }
     }
 }

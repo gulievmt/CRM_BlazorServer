@@ -23,6 +23,14 @@
                     <RadzenDataGridColumn TItem="CRMBlazorServerRBS.Models.ApplicationUser" Property="Email" Title="Email" />
                     <RadzenDataGridColumn TItem="CRMBlazorServerRBS.Models.ApplicationUser" Property="FirstName" Title="FirstName" />
                     <RadzenDataGridColumn TItem="CRMBlazorServerRBS.Models.ApplicationUser" Property="LastName" Title="LastName" />
+                    <RadzenDataGridColumn TItem="CRMBlazorServerRBS.Models.ApplicationUser" Property="IsWindowsUser" Title="Windows" Width="90px" TextAlign="TextAlign.Center" Filterable="true" Sortable="true">
+                        <Template Context="user">
+                            @if (user.IsWindowsUser)
+                            {
+                                <RadzenIcon Icon="computer" Style="color: var(--rz-primary)" title="Windows / Active Directory" />
+                            }
+                        </Template>
+                    </RadzenDataGridColumn>
                     <RadzenDataGridColumn TItem="CRMBlazorServerRBS.Models.ApplicationUser" Title="Picture" Filterable="false" Sortable="false">
                         <Template Context="user">
                             <RadzenImage Path="@user.Picture" Style="width: 30px; height: 30px" />

@@ -4,67 +4,106 @@
 <RadzenRow>
     <RadzenColumn SizeMD="12">
         <RadzenTemplateForm TItem="CRMBlazorServerRBS.Models.ApplicationUser" Data="@user" Visible="@(user != null)" Submit="@FormSubmit">
-            <RadzenAlert Title="Cannot create user" Shade="Shade.Lighter" Variant="Variant.Flat" Size="AlertSize.Small" AlertStyle="AlertStyle.Danger" Visible="@errorVisible">@error</RadzenAlert>
+            <RadzenAlert Title="Ошибка создания пользователя" Shade="Shade.Lighter" Variant="Variant.Flat" Size="AlertSize.Small" AlertStyle="AlertStyle.Danger" Visible="@errorVisible">@error</RadzenAlert>
 
             <RadzenStack style="margin-bottom: 1rem;">
+
+                @* ── Тип пользователя ── *@
+                <RadzenFormField Text="Тип пользователя" Variant="Variant.Filled">
+                    <ChildContent>
+                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.75rem">
+                            <RadzenSwitch @bind-Value="@(user.IsWindowsUser)" Change="@OnIsWindowsUserChanged" />
+                            <RadzenText>@(user.IsWindowsUser ? "Windows / Active Directory" : "Локальный")</RadzenText>
+                        </RadzenStack>
+                    </ChildContent>
+                </RadzenFormField>
+
+                @if (user.IsWindowsUser)
+                {
+                    @* ── AD autocomplete ── *@
+                    <RadzenFormField Text="Пользователь Active Directory" Variant="Variant.Filled">
+                        <ChildContent>
+                            <RadzenAutoComplete @bind-Value="@adSearchText"
+                                                Data="@adSuggestions"
+                                                TextProperty="DisplayText"
+                                                LoadData="@OnAdSearchLoad"
+                                                Change="@OnAdUserSelected"
+                                                Placeholder="Начните вводить имя или логин..."
+                                                style="width:100%"
+                                                Name="AdUser" />
+                        </ChildContent>
+                        <Helper>
+                            <RadzenCustomValidator Component="AdUser" Validator="@(() => !string.IsNullOrEmpty(user.UserName))" Text="Выберите пользователя из Active Directory" />
+                        </Helper>
+                    </RadzenFormField>
+                }
+
+                @* ── Email ── *@
                 <RadzenFormField Text="Email" Variant="Variant.Filled">
                     <ChildContent>
-                        <RadzenTextBox style="width: 100%" @bind-Value="@(user.Email)" Name="Email" />
+                        <RadzenTextBox style="width: 100%" @bind-Value="@(user.Email)" Name="Email" Disabled="@(user.IsWindowsUser && !string.IsNullOrEmpty(user.Email))" />
                     </ChildContent>
                     <Helper>
-                        <RadzenRequiredValidator Component="Email" Text="Email is required" />
+                        @if (!user.IsWindowsUser)
+                        {
+                            <RadzenRequiredValidator Component="Email" Text="Email обязателен" />
+                        }
                     </Helper>
                 </RadzenFormField>
-                <RadzenFormField Text="FirstName" Variant="Variant.Filled">
+
+                <RadzenFormField Text="Имя" Variant="Variant.Filled">
                     <ChildContent>
                         <RadzenTextBox style="width: 100%" @bind-Value="@(user.FirstName)" Name="FirstName" />
                     </ChildContent>
                     <Helper>
-                        <RadzenRequiredValidator Component="FirstName" Text="FirstName is required" />
+                        <RadzenRequiredValidator Component="FirstName" Text="Имя обязательно" />
                     </Helper>
                 </RadzenFormField>
-                <RadzenFormField Text="LastName" Variant="Variant.Filled">
+                <RadzenFormField Text="Фамилия" Variant="Variant.Filled">
                     <ChildContent>
                         <RadzenTextBox style="width: 100%" @bind-Value="@(user.LastName)" Name="LastName" />
                     </ChildContent>
                     <Helper>
-                        <RadzenRequiredValidator Component="LastName" Text="LastName is required" />
+                        <RadzenRequiredValidator Component="LastName" Text="Фамилия обязательна" />
                     </Helper>
                 </RadzenFormField>
                 <RadzenFormField Text="" Variant="Variant.Filled">
                     <ChildContent>
-                        <RadzenFileInput style="width: 100%" @bind-Value="@(user.Picture)" Name="Picture" ChooseText="Choose Picture" />
+                        <RadzenFileInput style="width: 100%" @bind-Value="@(user.Picture)" Name="Picture" ChooseText="Выбрать фото" />
                     </ChildContent>
-                    <Helper>
-                        <RadzenRequiredValidator Component="Picture" Text="Picture is required" />
-                    </Helper>
                 </RadzenFormField>
-                <RadzenFormField Text="Roles" Variant="Variant.Filled">
+                <RadzenFormField Text="Роли" Variant="Variant.Filled">
                     <ChildContent>
                         <RadzenDropDown Data="@roles" Multiple="true" style="width: 100%" TextProperty="Name" @bind-Value="@(userRoles)" ValueProperty="Id" Name="Roles" />
                     </ChildContent>
                 </RadzenFormField>
-                <RadzenFormField Text="Password" Variant="Variant.Filled">
-                    <ChildContent>
-                        <RadzenPassword @bind-Value="@(user.Password)" style="display: block; width: 100%" Name="Password" />
-                    </ChildContent>
-                    <Helper>
-                        <RadzenRequiredValidator Component="Password" Text="Password is required" />
-                    </Helper>
-                </RadzenFormField>
-                <RadzenFormField Text="Confirm Password" Variant="Variant.Filled">
-                    <ChildContent>
-                        <RadzenPassword style="display: block; width: 100%" @bind-Value="@(user.ConfirmPassword)" Name="ConfirmPassword" />
-                    </ChildContent>
-                    <Helper>
-                        <RadzenRequiredValidator Component="ConfirmPassword" Text="ConfirmPassword is required" />
-                        <RadzenCompareValidator Text="Passwords must match" Component="ConfirmPassword" Value="@user.Password" />
-                    </Helper>
-                </RadzenFormField>
+
+                @if (!user.IsWindowsUser)
+                {
+                    @* ── Password (only for local users) ── *@
+                    <RadzenFormField Text="Пароль" Variant="Variant.Filled">
+                        <ChildContent>
+                            <RadzenPassword @bind-Value="@(user.Password)" style="display: block; width: 100%" Name="Password" />
+                        </ChildContent>
+                        <Helper>
+                            <RadzenRequiredValidator Component="Password" Text="Пароль обязателен" />
+                        </Helper>
+                    </RadzenFormField>
+                    <RadzenFormField Text="Подтверждение пароля" Variant="Variant.Filled">
+                        <ChildContent>
+                            <RadzenPassword style="display: block; width: 100%" @bind-Value="@(user.ConfirmPassword)" Name="ConfirmPassword" />
+                        </ChildContent>
+                        <Helper>
+                            <RadzenRequiredValidator Component="ConfirmPassword" Text="Подтверждение обязательно" />
+                            <RadzenCompareValidator Text="Пароли не совпадают" Component="ConfirmPassword" Value="@user.Password" />
+                        </Helper>
+                    </RadzenFormField>
+                }
+
             </RadzenStack>
             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.End" Gap="0.5rem">
-                    <RadzenButton ButtonType="ButtonType.Submit" Icon="save" Text="Save" Variant="Variant.Flat" />
-                    <RadzenButton ButtonStyle="ButtonStyle.Light" Text="Cancel" Click="@CancelClick" Variant="Variant.Flat" />
+                <RadzenButton ButtonType="ButtonType.Submit" Icon="save" Text="Сохранить" Variant="Variant.Flat" />
+                <RadzenButton ButtonStyle="ButtonStyle.Light" Text="Отмена" Click="@CancelClick" Variant="Variant.Flat" />
             </RadzenStack>
         </RadzenTemplateForm>
     </RadzenColumn>

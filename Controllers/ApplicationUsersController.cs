@@ -134,13 +134,18 @@ namespace CRMBlazorServerRBS.Controllers
         [HttpPost]
         public async Task<IActionResult> Post([FromBody] ApplicationUser user)
         {
-            user.UserName = user.Email;
+            if (!user.IsWindowsUser)
+                user.UserName = user.Email;  // for local users, username = email (existing behavior)
+
             user.EmailConfirmed = true;
 
             var roles = user.Roles;
             user.Roles = null;
-            
-            IdentityResult result = await userManager.CreateAsync(user, user.Password);
+
+            // Windows users authenticate via Negotiate — no password stored
+            IdentityResult result = user.IsWindowsUser
+                ? await userManager.CreateAsync(user)
+                : await userManager.CreateAsync(user, user.Password);
 
             if (result.Succeeded && roles != null)
             {
