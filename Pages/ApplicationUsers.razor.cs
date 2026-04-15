@@ -35,6 +35,17 @@ namespace CRMBlazorServerRBS.Pages
         protected string error;
         protected bool errorVisible;
 
+        // ── Custom filter for IsWindowsUser column ──────────────────────────
+        protected string userTypeFilter = "all";
+
+        protected record UserTypeOption(string Value, string Label, string Icon);
+        protected static readonly IEnumerable<UserTypeOption> UserTypeOptions = new[]
+        {
+            new UserTypeOption("all",   "Все",              "filter_list"),
+            new UserTypeOption("local", "Локальный",        "person"),
+            new UserTypeOption("ad",    "Active Directory", "computer"),
+        };
+
         [Inject]
         protected SecurityService Security { get; set; }
 

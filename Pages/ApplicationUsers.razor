@@ -21,7 +21,8 @@
                 <Columns>
                     <RadzenDataGridColumn TItem="CRMBlazorServerRBS.Models.ApplicationUser" Property="IsWindowsUser" Width="60px" TextAlign="TextAlign.Center" Filterable="true" Sortable="true">
                         <HeaderTemplate>
-                            <RadzenIcon Icon="badge" title="Тип пользователя: AD или локальный" Style="font-size:1.2rem; color:var(--rz-text-secondary-color); vertical-align:middle;" />
+                            <RadzenIcon Icon="badge" title="Тип пользователя: AD или локальный"
+                                        Style="font-size:1.2rem; color:var(--rz-text-secondary-color); vertical-align:middle;" />
                         </HeaderTemplate>
                         <Template Context="user">
                             @if (user.IsWindowsUser)
@@ -33,6 +34,35 @@
                                 <RadzenIcon Icon="person" Style="color:var(--rz-text-disabled-color)" title="Локальный" />
                             }
                         </Template>
+                        <FilterTemplate Context="col">
+                            <RadzenDropDown TValue="string"
+                                            @bind-Value="@userTypeFilter"
+                                            Data="@UserTypeOptions"
+                                            TextProperty="Label"
+                                            ValueProperty="Value"
+                                            Change="@(_ => {
+                                                col.FilterValue = userTypeFilter switch {
+                                                    "ad"    => (bool?)true,
+                                                    "local" => (bool?)false,
+                                                    _       => null
+                                                };
+                                                grid0.Reload();
+                                            })"
+                                            Style="width:160px;">
+                                <ValueTemplate Context="opt">
+                                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="4px">
+                                        <RadzenIcon Icon="@opt.Icon" Style="font-size:1rem;" />
+                                        <span>@opt.Label</span>
+                                    </RadzenStack>
+                                </ValueTemplate>
+                                <Template Context="opt">
+                                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="6px">
+                                        <RadzenIcon Icon="@opt.Icon" Style="font-size:1rem;" />
+                                        <span>@opt.Label</span>
+                                    </RadzenStack>
+                                </Template>
+                            </RadzenDropDown>
+                        </FilterTemplate>
                     </RadzenDataGridColumn>
                     <RadzenDataGridColumn TItem="CRMBlazorServerRBS.Models.ApplicationUser" Property="UserName" Title="User Name" />
                     <RadzenDataGridColumn TItem="CRMBlazorServerRBS.Models.ApplicationUser" Property="Email" Title="Email" />
