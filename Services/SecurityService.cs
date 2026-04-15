@@ -228,6 +228,16 @@ SELECT TOP (1000) [Id]
         public async Task<ApplicationUser> GetUserById(string id)
         {
             var usr = securitDbContext.ApplicationUser.Where(u => u.Id == id).FirstOrDefault();
+            if (usr == null) return null;
+
+            // Load roles via Dapper — EF doesn't eager-load the navigation property here
+            var userRoles = await _connection.QueryAsync<ApplicationRole>(@"
+                SELECT r.Id, r.Name
+                FROM [dbo].[AspNetRoles] r
+                INNER JOIN [dbo].[AspNetUserRoles] ur ON ur.RoleId = r.Id
+                WHERE ur.UserId = @UserId", new { UserId = id });
+
+            usr.Roles = userRoles.ToList();
             return usr;
         }
 
