@@ -14,10 +14,10 @@
                     <RadzenSelectBar @bind-Value="@UserTypeValue" TValue="string" style="width:100%">
                         <Items>
                             <RadzenSelectBarItem Value="@("local")" Icon="person">
-                                <Template>Локальный</Template>
+                                <Template Context="_">Локальный</Template>
                             </RadzenSelectBarItem>
                             <RadzenSelectBarItem Value="@("ad")" Icon="computer">
-                                <Template>Active Directory</Template>
+                                <Template Context="_">Active Directory</Template>
                             </RadzenSelectBarItem>
                         </Items>
                     </RadzenSelectBar>
