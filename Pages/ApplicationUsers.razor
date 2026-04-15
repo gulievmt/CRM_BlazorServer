@@ -19,18 +19,26 @@
             <RadzenDataGrid @ref="grid0" AllowFiltering="true" AllowPaging="true" ShowPagingSummary="true" PageSizeOptions=@(new int[]{5, 10, 20, 30}) AllowSorting="true" Data="@users"
                 TItem="CRMBlazorServerRBS.Models.ApplicationUser" RowSelect="@RowSelect">
                 <Columns>
+                    <RadzenDataGridColumn TItem="CRMBlazorServerRBS.Models.ApplicationUser" Property="IsWindowsUser" Width="60px" TextAlign="TextAlign.Center" Filterable="true" Sortable="true">
+                        <HeaderTemplate>
+                            <RadzenIcon Icon="badge" title="Тип пользователя: AD или локальный" Style="font-size:1.2rem; color:var(--rz-text-secondary-color); vertical-align:middle;" />
+                        </HeaderTemplate>
+                        <Template Context="user">
+                            @if (user.IsWindowsUser)
+                            {
+                                <RadzenIcon Icon="computer" Style="color:var(--rz-primary)" title="Active Directory" />
+                            }
+                            else
+                            {
+                                <RadzenIcon Icon="person" Style="color:var(--rz-text-disabled-color)" title="Локальный" />
+                            }
+                        </Template>
+                    </RadzenDataGridColumn>
                     <RadzenDataGridColumn TItem="CRMBlazorServerRBS.Models.ApplicationUser" Property="UserName" Title="User Name" />
                     <RadzenDataGridColumn TItem="CRMBlazorServerRBS.Models.ApplicationUser" Property="Email" Title="Email" />
                     <RadzenDataGridColumn TItem="CRMBlazorServerRBS.Models.ApplicationUser" Property="FirstName" Title="FirstName" />
                     <RadzenDataGridColumn TItem="CRMBlazorServerRBS.Models.ApplicationUser" Property="LastName" Title="LastName" />
-                    <RadzenDataGridColumn TItem="CRMBlazorServerRBS.Models.ApplicationUser" Property="IsWindowsUser" Title="Windows" Width="90px" TextAlign="TextAlign.Center" Filterable="true" Sortable="true">
-                        <Template Context="user">
-                            @if (user.IsWindowsUser)
-                            {
-                                <RadzenIcon Icon="computer" Style="color: var(--rz-primary)" title="Windows / Active Directory" />
-                            }
-                        </Template>
-                    </RadzenDataGridColumn>
+
                     <RadzenDataGridColumn TItem="CRMBlazorServerRBS.Models.ApplicationUser" Title="Picture" Filterable="false" Sortable="false">
                         <Template Context="user">
                             <RadzenImage Path="@user.Picture" Style="width: 30px; height: 30px" />
