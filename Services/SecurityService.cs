@@ -41,10 +41,12 @@ namespace CRMBlazorServerRBS
 
         private readonly string connectionString;
         private readonly IDbConnection _connection;
+        private readonly UserManager<ApplicationUser> _userManager;
 
 
-        public SecurityService(ApplicationIdentityDbContext securitContext,   NavigationManager navigationManager,
-                               IHttpClientFactory factory, IDbConnection connection)
+        public SecurityService(ApplicationIdentityDbContext securitContext, NavigationManager navigationManager,
+                               IHttpClientFactory factory, IDbConnection connection,
+                               UserManager<ApplicationUser> userManager)
         {
             this.securitDbContext = securitContext;
             this.baseUri = new Uri($"{navigationManager.BaseUri}odata/Identity/");
@@ -52,6 +54,7 @@ namespace CRMBlazorServerRBS
             this.navigationManager = navigationManager;
             this._connection = connection;
             this._connection.Open();
+            this._userManager = userManager;
         }
 
         // Use a short-lived connection in GetRoles
@@ -243,40 +246,45 @@ SELECT TOP (1000) [Id]
 
         public async Task<ApplicationUser> UpdateUser(string id, ApplicationUser user)
         {
-            var entity = securitDbContext.ApplicationUser.Find(id);
-            if (entity == null)
+            // Use UserManager (not EF directly) to avoid entity-tracking conflicts
+            // when Roles navigation property contains already-tracked ApplicationRole instances.
+            var entity = await _userManager.FindByIdAsync(id);
+            if (entity == null) return null;
+
+            // Update scalar properties
+            entity.Email          = user.Email;
+            entity.FirstName      = user.FirstName;
+            entity.LastName       = user.LastName;
+            entity.Picture        = user.Picture;
+            entity.IsWindowsUser  = user.IsWindowsUser;
+            entity.NormalizedEmail = user.Email?.ToUpperInvariant();
+
+            var updateResult = await _userManager.UpdateAsync(entity);
+            if (!updateResult.Succeeded)
+                throw new InvalidOperationException(
+                    string.Join(", ", updateResult.Errors.Select(e => e.Description)));
+
+            // Sync roles: remove all current, then add the selected ones
+            if (user.Roles != null)
             {
-                return null;
+                var currentRoles = await _userManager.GetRolesAsync(entity);
+                await _userManager.RemoveFromRolesAsync(entity, currentRoles);
+                var newRoleNames = user.Roles.Select(r => r.Name).Where(n => n != null);
+                if (newRoleNames.Any())
+                    await _userManager.AddToRolesAsync(entity, newRoleNames);
             }
 
-            //entity.UserName = user.UserName;
-            //entity.Email = user.Email;
-            //entity.PhoneNumber = user.PhoneNumber;
-            //entity.PasswordHash = user.PasswordHash;
-            //entity.SecurityStamp = user.SecurityStamp;  
-            //entity.AccessFailedCount = user.AccessFailedCount;
-            //entity.ConcurrencyStamp = user.ConcurrencyStamp;
-            //entity.EmailConfirmed = user.EmailConfirmed;
-            //entity.LockoutEnabled = user.LockoutEnabled;
-
-
-            securitDbContext.Entry(entity).CurrentValues.SetValues(user);
-            securitDbContext.SaveChanges(); 
-
-
-            return user;
-
-
-            var uri = new Uri(baseUri, $"ApplicationUsers('{id}')");
-
-            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Patch, uri)
+            // Update password only for local users when a new password was provided
+            if (!user.IsWindowsUser && !string.IsNullOrEmpty(user.Password))
             {
-                Content = new StringContent(JsonSerializer.Serialize(user), Encoding.UTF8, "application/json")
-            };
+                var token = await _userManager.GeneratePasswordResetTokenAsync(entity);
+                var pwResult = await _userManager.ResetPasswordAsync(entity, token, user.Password);
+                if (!pwResult.Succeeded)
+                    throw new InvalidOperationException(
+                        string.Join(", ", pwResult.Errors.Select(e => e.Description)));
+            }
 
-            var response = await httpClient.SendAsync(httpRequestMessage);
-
-            return await response.ReadAsync<ApplicationUser>();
+            return entity;
         }
         public async Task ChangePassword(string oldPassword, string newPassword)
         {
