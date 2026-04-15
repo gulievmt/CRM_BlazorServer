@@ -127,9 +127,11 @@
 
                         @* Кнопка выбора — через нативный input, стилизованный под кнопку *@
                         <RadzenStack Gap="0.5rem" AlignItems="AlignItems.Center" Style="width:100%">
-                            <RadzenFileInput @bind-Value="@(user.Picture)" Name="Picture"
-                                             ChooseText="Выбрать фото" Icon="photo_camera"
-                                             Style="width:100%;" />
+                            <div class="file-input-no-clear" style="width:100%">
+                                <RadzenFileInput @bind-Value="@(user.Picture)" Name="Picture"
+                                                 ChooseText="Выбрать фото" Icon="photo_camera"
+                                                 Style="width:100%;" />
+                            </div>
 
                             @if (!string.IsNullOrEmpty(user.Picture))
                             {

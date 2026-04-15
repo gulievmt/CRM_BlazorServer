@@ -1,3 +1,8 @@
+/* ── Hide the built-in × clear button on RadzenFileInput when wrapped ── */
+.file-input-no-clear .rz-fileupload-clear {
+    display: none !important;
+}
+
 /* ── DataGrid filter dropdown: remove popup shadow and backdrop overlay ── */
 .rz-grid-table .rz-dropdown-panel {
     box-shadow: none;
