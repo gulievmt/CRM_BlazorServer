@@ -230,10 +230,16 @@ SELECT TOP (1000) [Id]
 
         public async Task<ApplicationUser> GetUserById(string id)
         {
-            var usr = securitDbContext.ApplicationUser.Where(u => u.Id == id).FirstOrDefault();
+            // AsNoTracking: the returned entity and any navigation properties it touches
+            // are NOT added to the EF change tracker, preventing role-tracking conflicts
+            // when UpdateUser is called later in the same Blazor Server circuit.
+            var usr = securitDbContext.ApplicationUser
+                .AsNoTracking()
+                .Where(u => u.Id == id)
+                .FirstOrDefault();
             if (usr == null) return null;
 
-            // Load roles via Dapper — EF doesn't eager-load the navigation property here
+            // Load roles via Dapper — separate query, no EF tracking involved
             var userRoles = await _connection.QueryAsync<ApplicationRole>(@"
                 SELECT r.Id, r.Name
                 FROM [dbo].[AspNetRoles] r
@@ -246,8 +252,11 @@ SELECT TOP (1000) [Id]
 
         public async Task<ApplicationUser> UpdateUser(string id, ApplicationUser user)
         {
-            // Use UserManager (not EF directly) to avoid entity-tracking conflicts
-            // when Roles navigation property contains already-tracked ApplicationRole instances.
+            // Clear ALL tracked entities accumulated during the Blazor Server circuit lifetime.
+            // Without this, stale ApplicationRole instances from earlier reads remain in the
+            // tracker and conflict with the ones UserManager loads internally.
+            securitDbContext.ChangeTracker.Clear();
+
             var entity = await _userManager.FindByIdAsync(id);
             if (entity == null) return null;
 
