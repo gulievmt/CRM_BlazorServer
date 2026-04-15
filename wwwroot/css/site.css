@@ -1,3 +1,16 @@
+/* ── DataGrid filter dropdown: remove popup shadow and backdrop overlay ── */
+.rz-grid-table .rz-dropdown-panel {
+    box-shadow: none;
+    border: 1px solid var(--rz-border-color);
+}
+
+/* Radzen renders an invisible overlay div behind open dropdowns for
+   click-outside detection; hide any accidental visible background */
+.rz-grid-table ~ .rz-overlay,
+.rz-dropdown + .rz-overlay {
+    background-color: transparent !important;
+}
+
 #blazor-error-ui {
     background: lightyellow;
     bottom: 0;
