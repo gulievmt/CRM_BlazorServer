@@ -98,10 +98,10 @@
 
                 @* ── Правая колонка: фото ── *@
                 <RadzenColumn SizeMD="4">
-                    <RadzenStack Gap="0.75rem" AlignItems="AlignItems.Center"
+                    <RadzenStack Gap="1rem" AlignItems="AlignItems.Center"
                                  Style="height:100%; padding-top:0.25rem;">
 
-                        @* Предпросмотр текущего фото *@
+                        @* Аватар *@
                         @if (!string.IsNullOrEmpty(user.Picture))
                         {
                             <RadzenImage Path="@user.Picture"
@@ -119,13 +119,27 @@
                             </div>
                         }
 
+                        @* Имя *@
                         <RadzenText TextStyle="TextStyle.Caption"
                                     style="color:var(--rz-text-secondary-color); text-align:center;">
                             @(string.IsNullOrEmpty(user.FirstName) ? user.UserName : $"{user.FirstName} {user.LastName}")
                         </RadzenText>
 
-                        <RadzenFileInput style="width:100%" @bind-Value="@(user.Picture)"
-                                         Name="Picture" ChooseText="Выбрать фото" />
+                        @* Кнопка выбора — через нативный input, стилизованный под кнопку *@
+                        <RadzenStack Gap="0.5rem" AlignItems="AlignItems.Center" Style="width:100%">
+                            <RadzenFileInput @bind-Value="@(user.Picture)" Name="Picture"
+                                             ChooseText="Выбрать фото" Icon="photo_camera"
+                                             Style="width:100%;" />
+
+                            @if (!string.IsNullOrEmpty(user.Picture))
+                            {
+                                <RadzenButton Text="Удалить фото" Icon="delete"
+                                              ButtonStyle="ButtonStyle.Danger"
+                                              Variant="Variant.Text"
+                                              Size="ButtonSize.Small"
+                                              Click="@(() => user.Picture = null)" />
+                            }
+                        </RadzenStack>
 
                     </RadzenStack>
                 </RadzenColumn>
