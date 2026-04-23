@@ -214,12 +214,14 @@ namespace CRMBlazorServerRBS.Controllers
             // would cause "another instance with the same key is already being tracked".
             var (adEmail, adFirstName, adLastName, adSid) = GetAdInfo(shortName);
 
+            var newUserName  = !string.IsNullOrEmpty(shortName)   ? shortName   : user.UserName;
             var newEmail     = !string.IsNullOrEmpty(adEmail)     ? adEmail     : user.Email;
             var newFirstName = !string.IsNullOrEmpty(adFirstName) ? adFirstName : user.FirstName;
             var newLastName  = !string.IsNullOrEmpty(adLastName)  ? adLastName  : user.LastName;
             var newSid       = !string.IsNullOrEmpty(currentSid)  ? currentSid  : user.Sid;
 
             bool needsUpdate =
+                newUserName  != user.UserName  ||
                 newEmail     != user.Email     ||
                 newFirstName != user.FirstName ||
                 newLastName  != user.LastName  ||
@@ -229,18 +231,22 @@ namespace CRMBlazorServerRBS.Controllers
             {
                 await _db.ExecuteAsync(@"
                     UPDATE [dbo].[AspNetUsers]
-                    SET    Email           = @Email,
-                           NormalizedEmail = @NormalizedEmail,
-                           FirstName       = @FirstName,
-                           LastName        = @LastName,
-                           Sid             = @Sid
+                    SET    UserName           = @UserName,
+                           NormalizedUserName = @NormalizedUserName,
+                           Email              = @Email,
+                           NormalizedEmail    = @NormalizedEmail,
+                           FirstName          = @FirstName,
+                           LastName           = @LastName,
+                           Sid                = @Sid
                     WHERE  Id = @Id",
                     new {
-                        Email           = newEmail,
-                        NormalizedEmail = newEmail?.ToUpperInvariant(),
-                        FirstName       = newFirstName,
-                        LastName        = newLastName,
-                        Sid             = newSid,
+                        UserName           = newUserName,
+                        NormalizedUserName = newUserName?.ToUpperInvariant(),
+                        Email              = newEmail,
+                        NormalizedEmail    = newEmail?.ToUpperInvariant(),
+                        FirstName          = newFirstName,
+                        LastName           = newLastName,
+                        Sid                = newSid,
                         user.Id
                     });
             }
