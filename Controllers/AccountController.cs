@@ -208,24 +208,42 @@ namespace CRMBlazorServerRBS.Controllers
             if (user == null)
                 return RedirectWithError($"Windows-пользователь '{shortName}' не найден в системе.", redirectUrl);
 
-            // 3. Sync AD data → update DB if Email / FirstName / LastName / Sid changed
+            // 3. Sync AD data → update DB if Email / FirstName / LastName / Sid changed.
+            // Use Dapper directly to avoid EF tracking conflicts: the user object may have
+            // been loaded via Dapper (untracked), so passing it to userManager.UpdateAsync
+            // would cause "another instance with the same key is already being tracked".
             var (adEmail, adFirstName, adLastName, adSid) = GetAdInfo(shortName);
-            bool needsUpdate = false;
 
-            if (!string.IsNullOrEmpty(adEmail) && user.Email != adEmail)
-            { user.Email = adEmail; user.NormalizedEmail = adEmail.ToUpperInvariant(); needsUpdate = true; }
+            var newEmail     = !string.IsNullOrEmpty(adEmail)     ? adEmail     : user.Email;
+            var newFirstName = !string.IsNullOrEmpty(adFirstName) ? adFirstName : user.FirstName;
+            var newLastName  = !string.IsNullOrEmpty(adLastName)  ? adLastName  : user.LastName;
+            var newSid       = !string.IsNullOrEmpty(currentSid)  ? currentSid  : user.Sid;
 
-            if (!string.IsNullOrEmpty(adFirstName) && user.FirstName != adFirstName)
-            { user.FirstName = adFirstName; needsUpdate = true; }
-
-            if (!string.IsNullOrEmpty(adLastName) && user.LastName != adLastName)
-            { user.LastName = adLastName; needsUpdate = true; }
-
-            if (!string.IsNullOrEmpty(currentSid) && user.Sid != currentSid)
-            { user.Sid = currentSid; needsUpdate = true; }
+            bool needsUpdate =
+                newEmail     != user.Email     ||
+                newFirstName != user.FirstName ||
+                newLastName  != user.LastName  ||
+                newSid       != user.Sid;
 
             if (needsUpdate)
-                await userManager.UpdateAsync(user);
+            {
+                await _db.ExecuteAsync(@"
+                    UPDATE [dbo].[AspNetUsers]
+                    SET    Email           = @Email,
+                           NormalizedEmail = @NormalizedEmail,
+                           FirstName       = @FirstName,
+                           LastName        = @LastName,
+                           Sid             = @Sid
+                    WHERE  Id = @Id",
+                    new {
+                        Email           = newEmail,
+                        NormalizedEmail = newEmail?.ToUpperInvariant(),
+                        FirstName       = newFirstName,
+                        LastName        = newLastName,
+                        Sid             = newSid,
+                        user.Id
+                    });
+            }
 
             await signInManager.SignInAsync(user, isPersistent: false);
             return Redirect($"~/{redirectUrl}");
