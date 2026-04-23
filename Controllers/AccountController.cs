@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
+using System.DirectoryServices;
 using System.Linq;
 using System.Security.Claims;
+using System.Security.Principal;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
@@ -11,7 +14,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using CRMBlazorServerRBS.Models;
-using System.Security.Principal;
+using Dapper;
 
 namespace CRMBlazorServerRBS.Controllers
 {
@@ -23,17 +26,56 @@ namespace CRMBlazorServerRBS.Controllers
         private readonly RoleManager<ApplicationRole> roleManager;
         private readonly IWebHostEnvironment env;
         private readonly IConfiguration configuration;
-        private readonly SecurityService _securityService;
+        private readonly IDbConnection _db;
 
-        public AccountController(IWebHostEnvironment env, SignInManager<ApplicationUser> signInManager, UserManager<ApplicationUser> userManager,
-            RoleManager<ApplicationRole> roleManager, IConfiguration configuration, SecurityService securityService)
+        public AccountController(IWebHostEnvironment env, SignInManager<ApplicationUser> signInManager,
+            UserManager<ApplicationUser> userManager, RoleManager<ApplicationRole> roleManager,
+            IConfiguration configuration, IDbConnection db)
         {
             this.signInManager = signInManager;
             this.userManager = userManager;
             this.roleManager = roleManager;
             this.env = env;
             this.configuration = configuration;
-            this._securityService = securityService;
+            this._db = db;
+        }
+
+        // ── AD helpers (no dependency on Blazor NavigationManager) ─────────
+
+        private async Task<ApplicationUser> FindUserBySidAsync(string sid)
+        {
+            if (string.IsNullOrEmpty(sid)) return null;
+            return await _db.QueryFirstOrDefaultAsync<ApplicationUser>(
+                "SELECT * FROM [dbo].[AspNetUsers] WHERE [Sid] = @Sid", new { Sid = sid });
+        }
+
+        private static (string Email, string FirstName, string LastName, string Sid) GetAdInfo(string samAccountName)
+        {
+            if (string.IsNullOrWhiteSpace(samAccountName))
+                return default;
+            try
+            {
+                using var entry = new DirectoryEntry("LDAP://fincaint.local");
+                using var searcher = new DirectorySearcher(entry)
+                {
+                    Filter = $"(&(objectClass=user)(objectCategory=person)(sAMAccountName={samAccountName}))",
+                    SizeLimit = 1
+                };
+                searcher.PropertiesToLoad.AddRange(
+                    new[] { "givenName", "sn", "mail", "objectSid" });
+                var r = searcher.FindOne();
+                if (r == null) return default;
+
+                string sid = "";
+                if (r.Properties["objectSid"]?.Count > 0 && r.Properties["objectSid"][0] is byte[] sidBytes)
+                    sid = new SecurityIdentifier(sidBytes, 0).Value;
+
+                static string P(SearchResult sr, string k) =>
+                    sr.Properties[k]?.Count > 0 ? sr.Properties[k][0]?.ToString() ?? "" : "";
+
+                return (P(r, "mail"), P(r, "givenName"), P(r, "sn"), sid);
+            }
+            catch { return default; }
         }
 
         private IActionResult RedirectWithError(string error, string redirectUrl = null)
@@ -149,14 +191,14 @@ namespace CRMBlazorServerRBS.Controllers
                 ? windowsUsername.Split('\\')[1]
                 : windowsUsername;
 
-            // Get Windows SID — survives username/email renames in AD
-            var windowsIdentity = User.Identity as System.Security.Principal.WindowsIdentity;
+            // Get Windows SID — unique identifier that survives username/email renames
+            var windowsIdentity = User.Identity as WindowsIdentity;
             var currentSid = windowsIdentity?.User?.Value;
 
-            // 1. Find by SID first (most reliable)
+            // 1. Find by SID (most reliable)
             ApplicationUser user = null;
             if (!string.IsNullOrEmpty(currentSid))
-                user = await _securityService.GetUserBySidAsync(currentSid);
+                user = await FindUserBySidAsync(currentSid);
 
             // 2. Fallback: find by Windows username
             if (user == null)
@@ -166,26 +208,19 @@ namespace CRMBlazorServerRBS.Controllers
             if (user == null)
                 return RedirectWithError($"Windows-пользователь '{shortName}' не найден в системе.", redirectUrl);
 
-            // 3. Sync current AD data → update DB if anything changed
-            var adInfo = _securityService.GetAdInfoBySamAccountName(shortName);
+            // 3. Sync AD data → update DB if Email / FirstName / LastName / Sid changed
+            var (adEmail, adFirstName, adLastName, adSid) = GetAdInfo(shortName);
             bool needsUpdate = false;
 
-            if (adInfo != null)
-            {
-                if (!string.IsNullOrEmpty(adInfo.Email) && user.Email != adInfo.Email)
-                {
-                    user.Email = adInfo.Email;
-                    user.NormalizedEmail = adInfo.Email.ToUpperInvariant();
-                    needsUpdate = true;
-                }
-                if (!string.IsNullOrEmpty(adInfo.FirstName) && user.FirstName != adInfo.FirstName)
-                { user.FirstName = adInfo.FirstName; needsUpdate = true; }
+            if (!string.IsNullOrEmpty(adEmail) && user.Email != adEmail)
+            { user.Email = adEmail; user.NormalizedEmail = adEmail.ToUpperInvariant(); needsUpdate = true; }
 
-                if (!string.IsNullOrEmpty(adInfo.LastName) && user.LastName != adInfo.LastName)
-                { user.LastName = adInfo.LastName; needsUpdate = true; }
-            }
+            if (!string.IsNullOrEmpty(adFirstName) && user.FirstName != adFirstName)
+            { user.FirstName = adFirstName; needsUpdate = true; }
 
-            // Save SID if not yet stored
+            if (!string.IsNullOrEmpty(adLastName) && user.LastName != adLastName)
+            { user.LastName = adLastName; needsUpdate = true; }
+
             if (!string.IsNullOrEmpty(currentSid) && user.Sid != currentSid)
             { user.Sid = currentSid; needsUpdate = true; }
 
