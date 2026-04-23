@@ -200,10 +200,20 @@ namespace CRMBlazorServerRBS.Controllers
             if (!string.IsNullOrEmpty(currentSid))
                 user = await FindUserBySidAsync(currentSid);
 
-            // 2. Fallback: find by Windows username
+            // 2. Fallback: query AD for the SID by username, search DB by that SID.
+            //    Handles existing users whose [Sid] column was not yet populated.
+            if (user == null && !string.IsNullOrEmpty(shortName))
+            {
+                var (_, _, _, adSidFallback) = GetAdInfo(shortName);
+                if (!string.IsNullOrEmpty(adSidFallback))
+                    user = await FindUserBySidAsync(adSidFallback);
+            }
+
+            // 3. Last resort: find by username string (for dev/local accounts)
             if (user == null)
-                user = await userManager.FindByNameAsync(windowsUsername)
-                    ?? await userManager.FindByNameAsync(shortName);
+                user = await _db.QueryFirstOrDefaultAsync<ApplicationUser>(
+                    "SELECT * FROM [dbo].[AspNetUsers] WHERE [UserName] = @UserName OR [NormalizedUserName] = @Normalized",
+                    new { UserName = shortName, Normalized = shortName?.ToUpperInvariant() });
 
             if (user == null)
                 return RedirectWithError($"Windows-пользователь '{shortName}' не найден в системе.", redirectUrl);
