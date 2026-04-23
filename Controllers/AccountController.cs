@@ -23,15 +23,17 @@ namespace CRMBlazorServerRBS.Controllers
         private readonly RoleManager<ApplicationRole> roleManager;
         private readonly IWebHostEnvironment env;
         private readonly IConfiguration configuration;
-    
+        private readonly SecurityService _securityService;
+
         public AccountController(IWebHostEnvironment env, SignInManager<ApplicationUser> signInManager, UserManager<ApplicationUser> userManager,
-            RoleManager<ApplicationRole> roleManager, IConfiguration configuration)
+            RoleManager<ApplicationRole> roleManager, IConfiguration configuration, SecurityService securityService)
         {
             this.signInManager = signInManager;
             this.userManager = userManager;
             this.roleManager = roleManager;
             this.env = env;
             this.configuration = configuration;
+            this._securityService = securityService;
         }
 
         private IActionResult RedirectWithError(string error, string redirectUrl = null)
@@ -142,27 +144,55 @@ namespace CRMBlazorServerRBS.Controllers
         [Authorize(AuthenticationSchemes = "Negotiate")]
         public async Task<IActionResult> WindowsLogin(string redirectUrl)
         {
-            var windowsUsername = User.Identity?.Name; // формат: DOMAIN\username
-
-            if (string.IsNullOrEmpty(windowsUsername))
-                return RedirectWithError("Не удалось получить имя Windows-пользователя", redirectUrl);
-
-            // Ищем пользователя сначала по полному имени (DOMAIN\user), потом по короткому (user)
-            var shortName = windowsUsername.Contains('\\')
+            var windowsUsername = User.Identity?.Name;
+            var shortName = windowsUsername?.Contains('\\') == true
                 ? windowsUsername.Split('\\')[1]
                 : windowsUsername;
 
-            var user = await userManager.FindByNameAsync(windowsUsername)
+            // Get Windows SID — survives username/email renames in AD
+            var windowsIdentity = User.Identity as System.Security.Principal.WindowsIdentity;
+            var currentSid = windowsIdentity?.User?.Value;
+
+            // 1. Find by SID first (most reliable)
+            ApplicationUser user = null;
+            if (!string.IsNullOrEmpty(currentSid))
+                user = await _securityService.GetUserBySidAsync(currentSid);
+
+            // 2. Fallback: find by Windows username
+            if (user == null)
+                user = await userManager.FindByNameAsync(windowsUsername)
                     ?? await userManager.FindByNameAsync(shortName);
 
             if (user == null)
-                return RedirectWithError(
-                    $"Windows-пользователь '{shortName}' не найден в системе. Обратитесь к администратору.",
-                    redirectUrl);
+                return RedirectWithError($"Windows-пользователь '{shortName}' не найден в системе.", redirectUrl);
 
-            // Выдаём Identity cookie — дальше приложение работает как обычно
+            // 3. Sync current AD data → update DB if anything changed
+            var adInfo = _securityService.GetAdInfoBySamAccountName(shortName);
+            bool needsUpdate = false;
+
+            if (adInfo != null)
+            {
+                if (!string.IsNullOrEmpty(adInfo.Email) && user.Email != adInfo.Email)
+                {
+                    user.Email = adInfo.Email;
+                    user.NormalizedEmail = adInfo.Email.ToUpperInvariant();
+                    needsUpdate = true;
+                }
+                if (!string.IsNullOrEmpty(adInfo.FirstName) && user.FirstName != adInfo.FirstName)
+                { user.FirstName = adInfo.FirstName; needsUpdate = true; }
+
+                if (!string.IsNullOrEmpty(adInfo.LastName) && user.LastName != adInfo.LastName)
+                { user.LastName = adInfo.LastName; needsUpdate = true; }
+            }
+
+            // Save SID if not yet stored
+            if (!string.IsNullOrEmpty(currentSid) && user.Sid != currentSid)
+            { user.Sid = currentSid; needsUpdate = true; }
+
+            if (needsUpdate)
+                await userManager.UpdateAsync(user);
+
             await signInManager.SignInAsync(user, isPersistent: false);
-
             return Redirect($"~/{redirectUrl}");
         }
     }

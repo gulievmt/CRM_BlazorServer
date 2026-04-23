@@ -83,6 +83,7 @@ namespace CRMBlazorServerRBS.Pages
                 user.Email     = selectedAdUser.Email;
                 user.FirstName = selectedAdUser.FirstName;
                 user.LastName  = selectedAdUser.LastName;
+                user.Sid       = selectedAdUser.Sid;
             }
         }
 

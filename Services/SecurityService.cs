@@ -1,5 +1,6 @@
 // SQL MIGRATION REQUIRED before running the app:
 // ALTER TABLE [dbo].[AspNetUsers] ADD [IsWindowsUser] BIT NOT NULL DEFAULT 0;
+// ALTER TABLE [dbo].[AspNetUsers] ADD [Sid] NVARCHAR(200) NULL;
 using CRMBlazorServerRBS.Data;
 using CRMBlazorServerRBS.Models;
 using Dapper;
@@ -19,6 +20,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Web;
 using System.DirectoryServices;
+using System.Security.Principal;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
@@ -315,7 +317,7 @@ SELECT TOP (1000) [Id]
             }
         }
 
-        public record AdUserInfo(string SamAccountName, string DisplayName, string FirstName, string LastName, string Email)
+        public record AdUserInfo(string SamAccountName, string DisplayName, string FirstName, string LastName, string Email, string Sid = "")
         {
             public string DisplayText => string.IsNullOrEmpty(DisplayName)
                 ? SamAccountName
@@ -340,13 +342,18 @@ SELECT TOP (1000) [Id]
                                  $"(|(sAMAccountName={searchTerm}*)(displayName=*{searchTerm}*)(givenName={searchTerm}*)(sn={searchTerm}*)))",
                         SizeLimit = 25
                     };
-                    searcher.PropertiesToLoad.AddRange(new[] { "sAMAccountName", "displayName", "givenName", "sn", "mail" });
+                    searcher.PropertiesToLoad.AddRange(new[] { "sAMAccountName", "displayName", "givenName", "sn", "mail", "objectSid" });
 
                     foreach (SearchResult r in searcher.FindAll())
                     {
                         var sam = Prop(r, "sAMAccountName");
                         if (string.IsNullOrEmpty(sam)) continue;
-                        results.Add(new AdUserInfo(sam, Prop(r, "displayName"), Prop(r, "givenName"), Prop(r, "sn"), Prop(r, "mail")));
+
+                        // Parse objectSid
+                        string sid = "";
+                        if (r.Properties["objectSid"]?.Count > 0 && r.Properties["objectSid"][0] is byte[] sidBytes)
+                            sid = new SecurityIdentifier(sidBytes, 0).Value;
+                        results.Add(new AdUserInfo(sam, Prop(r, "displayName"), Prop(r, "givenName"), Prop(r, "sn"), Prop(r, "mail"), sid));
                     }
                 }
                 catch { /* AD not available — return empty */ }
@@ -354,6 +361,44 @@ SELECT TOP (1000) [Id]
             });
 
             static string Prop(SearchResult r, string key) =>
+                r.Properties[key]?.Count > 0 ? r.Properties[key][0]?.ToString() ?? "" : "";
+        }
+
+        /// <summary>Find a local DB user by their Windows SID.</summary>
+        public async Task<ApplicationUser> GetUserBySidAsync(string sid)
+        {
+            if (string.IsNullOrEmpty(sid)) return null;
+            return await _connection.QueryFirstOrDefaultAsync<ApplicationUser>(
+                "SELECT * FROM [dbo].[AspNetUsers] WHERE [Sid] = @Sid", new { Sid = sid });
+        }
+
+        /// <summary>Query AD synchronously for a user by sAMAccountName and return their current info.</summary>
+        public AdUserInfo GetAdInfoBySamAccountName(string samAccountName)
+        {
+            if (string.IsNullOrWhiteSpace(samAccountName)) return null;
+            try
+            {
+                using var entry = new DirectoryEntry("LDAP://fincaint.local");
+                using var searcher = new DirectorySearcher(entry)
+                {
+                    Filter = $"(&(objectClass=user)(objectCategory=person)(sAMAccountName={samAccountName}))",
+                    SizeLimit = 1
+                };
+                searcher.PropertiesToLoad.AddRange(new[] { "sAMAccountName", "displayName", "givenName", "sn", "mail", "objectSid" });
+                var r = searcher.FindOne();
+                if (r == null) return null;
+
+                string sid = "";
+                if (r.Properties["objectSid"]?.Count > 0 && r.Properties["objectSid"][0] is byte[] sidBytes)
+                    sid = new SecurityIdentifier(sidBytes, 0).Value;
+
+                return new AdUserInfo(
+                    Prop2(r, "sAMAccountName"), Prop2(r, "displayName"),
+                    Prop2(r, "givenName"), Prop2(r, "sn"), Prop2(r, "mail"), sid);
+            }
+            catch { return null; }
+
+            static string Prop2(SearchResult r, string key) =>
                 r.Properties[key]?.Count > 0 ? r.Properties[key][0]?.ToString() ?? "" : "";
         }
     }
