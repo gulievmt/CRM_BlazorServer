@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.Net.Http;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -9,6 +11,8 @@ using Microsoft.AspNetCore.Components.Web.Virtualization;
 using Microsoft.JSInterop;
 using Radzen;
 using Radzen.Blazor;
+using CRMBlazorServerRBS.Models.Menu;
+using CRMBlazorServerRBS.Services;
 
 namespace CRMBlazorServerRBS.Shared
 {
@@ -32,10 +36,19 @@ namespace CRMBlazorServerRBS.Shared
         [Inject]
         protected NotificationService NotificationService { get; set; }
 
-        private bool sidebarExpanded = true;
-
         [Inject]
         protected SecurityService Security { get; set; }
+
+        [Inject]
+        protected MenuService MenuService { get; set; }
+
+        private bool sidebarExpanded = true;
+        protected List<MenuItem> MenuItems { get; set; } = new();
+
+        protected override async Task OnInitializedAsync()
+        {
+            MenuItems = await MenuService.GetMenuForCurrentUserAsync();
+        }
 
         void SidebarToggleClick()
         {

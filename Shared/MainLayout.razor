@@ -13,18 +13,17 @@
             <RadzenColumn Size="7">
                 <RadzenStack AlignItems="AlignItems.Center" Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End">
                     <RadzenProfileMenu Visible="@Security.IsAuthenticated()" Click="@ProfileMenuClick">
-                        <ChildContent>
-
-                            <RadzenProfileMenuItem Path="profile" Icon="settings" Text="Profile" />
-                            <RadzenProfileMenuItem Path="application-users" Icon="person" Text="Users" Visible="@Security.IsInRole("Sales Manager")"/>
-                            <RadzenProfileMenuItem Path="application-roles" Icon="security" Text="Roles" Visible="@Security.IsInRole("Sales Manager")"/>
-                            <RadzenProfileMenuItem Text="Logout" Value="Logout" Icon="power_settings_new" />
-                        </ChildContent>
                         <Template>
                             <RadzenLabel Text="@Security.User.FirstName" />
                             <RadzenLabel Text="@Security.User.LastName" />
                             <RadzenImage Path="@Security.User.Picture" style="width:32px;height:32px;border-radius:16px;" />
                         </Template>
+                        <ChildContent>
+                            <RadzenProfileMenuItem Path="profile" Icon="settings" Text="Profile" />
+                            <RadzenProfileMenuItem Path="application-users" Icon="person" Text="Users" Visible="@Security.IsInRole("Sales Manager")"/>
+                            <RadzenProfileMenuItem Path="application-roles" Icon="security" Text="Roles" Visible="@Security.IsInRole("Sales Manager")"/>
+                            <RadzenProfileMenuItem Text="Logout" Value="Logout" Icon="power_settings_new" />
+                        </ChildContent>
                     </RadzenProfileMenu>
                 </RadzenStack>
             </RadzenColumn>
@@ -36,16 +35,22 @@
             <RadzenText Text="CRMBlazorServerRBS" TextStyle="Radzen.Blazor.TextStyle.Subtitle1" class="rz-mb-0" style="color: var(--rz-primary-light);" />
         </RadzenStack>
         <RadzenPanelMenu>
-            <RadzenPanelMenuItem Text="Dashboard" Path="" Icon="home" />
-            <RadzenPanelMenuItem Text="Contacts" Path="contacts" Icon="perm_contact_calendar" />
-            <RadzenPanelMenuItem Text="Tasks" Path="tasks" Icon="work" />
-            <RadzenPanelMenuItem Text="Opportunities" Path="opportunities" Icon="shopping_cart" />
-            <RadzenPanelMenuItem Text="Загрузка файла" Path="file-upload" Icon="upload_file" />
-            <RadzenPanelMenuItem Text="Settings" Visible="@Security.IsInRole("Sales Manager")">
-                <RadzenPanelMenuItem Text="OpportunityStatuses" Path="opportunity-statuses" />
-                <RadzenPanelMenuItem Text="TaskStatuses" Path="task-statuses" />
-                <RadzenPanelMenuItem Text="TaskTypes" Path="task-types" />
-            </RadzenPanelMenuItem>
+            @foreach (var item in MenuItems)
+            {
+                @if (item.Children.Count > 0)
+                {
+                    <RadzenPanelMenuItem Text="@item.Text" Icon="@item.Icon">
+                        @foreach (var child in item.Children)
+                        {
+                            <RadzenPanelMenuItem Text="@child.Text" Path="@child.Path" Icon="@child.Icon" />
+                        }
+                    </RadzenPanelMenuItem>
+                }
+                else
+                {
+                    <RadzenPanelMenuItem Text="@item.Text" Path="@item.Path" Icon="@item.Icon" />
+                }
+            }
         </RadzenPanelMenu>
         <RadzenStack AlignItems="Radzen.AlignItems.Center" Gap="0" class="rz-py-4 rz-py-lg-6" Style="padding: var(--rz-panel-menu-item-padding);">
             <RadzenText Text="CRMBlazorServerRBS v1.0.0" TextStyle="Radzen.Blazor.TextStyle.Caption" style="color: var(--rz-text-disabled-color);" TagName="Radzen.Blazor.TagName.P" TextAlign="Radzen.TextAlign.Center" />

@@ -51,6 +51,7 @@ builder.Services.AddAuthentication()
     .AddNegotiate();          // Windows (Kerberos/NTLM) — дополнительная схема
 builder.Services.AddAuthorization();
 builder.Services.AddScoped<CRMBlazorServerRBS.SecurityService>();
+builder.Services.AddScoped<CRMBlazorServerRBS.Services.MenuService>();
 builder.Services.AddDbContext<ApplicationIdentityDbContext>(options =>
 {
     options.UseSqlServer(builder.Configuration.GetConnectionString("RadzenCRMConnection"));

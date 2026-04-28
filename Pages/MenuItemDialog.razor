@@ -1,0 +1,87 @@
+@using CRMBlazorServerRBS.Models.Menu
+
+<RadzenRow>
+    <RadzenColumn SizeMD="12">
+        <RadzenTemplateForm TItem="MenuItemEditModel" Data="@model"
+                            Visible="@(model != null)" Submit="@FormSubmit">
+
+            <RadzenAlert Title="Ошибка сохранения" Shade="Shade.Lighter" Variant="Variant.Flat"
+                         Size="AlertSize.Small" AlertStyle="AlertStyle.Danger" Visible="@errorVisible">
+                @error
+            </RadzenAlert>
+
+            <RadzenStack Gap="0.75rem" style="margin-bottom: 1rem;">
+
+                <RadzenFormField Text="Текст пункта меню" Variant="Variant.Filled">
+                    <ChildContent>
+                        <RadzenTextBox style="width:100%" @bind-Value="@model.Text" Name="Text" />
+                    </ChildContent>
+                    <Helper>
+                        <RadzenRequiredValidator Component="Text" Text="Текст обязателен" />
+                    </Helper>
+                </RadzenFormField>
+
+                <RadzenFormField Text="Path (URL, пусто для групп)" Variant="Variant.Filled">
+                    <ChildContent>
+                        <RadzenTextBox style="width:100%" @bind-Value="@model.Path" Name="Path" />
+                    </ChildContent>
+                </RadzenFormField>
+
+                <RadzenFormField Text="Иконка (Material Icons)" Variant="Variant.Filled">
+                    <ChildContent>
+                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="8px">
+                            <RadzenTextBox style="width:100%" @bind-Value="@model.Icon" Name="Icon" />
+                            @if (!string.IsNullOrEmpty(model.Icon))
+                            {
+                                <RadzenIcon Icon="@model.Icon" Style="font-size:1.5rem; color:var(--rz-primary)" />
+                            }
+                        </RadzenStack>
+                    </ChildContent>
+                </RadzenFormField>
+
+                <RadzenFormField Text="Родительский пункт (пусто = верхний уровень)" Variant="Variant.Filled">
+                    <ChildContent>
+                        <RadzenDropDown TValue="int?" @bind-Value="@model.ParentId"
+                                        Data="@eligibleParents" TextProperty="Text" ValueProperty="Id"
+                                        AllowClear="true" Placeholder="— верхний уровень —"
+                                        style="width:100%" Name="ParentId" />
+                    </ChildContent>
+                </RadzenFormField>
+
+                <RadzenFormField Text="Порядок сортировки" Variant="Variant.Filled">
+                    <ChildContent>
+                        <RadzenNumeric TValue="int" style="width:100%"
+                                       @bind-Value="@model.SortOrder" Name="SortOrder" />
+                    </ChildContent>
+                </RadzenFormField>
+
+                <RadzenFormField Text="Разрешённые роли (пусто = все пользователи)" Variant="Variant.Filled">
+                    <ChildContent>
+                        <RadzenDropDown TValue="IEnumerable<string>"
+                                        @bind-Value="@selectedRoles"
+                                        Data="@availableRoles"
+                                        Multiple="true" AllowClear="true"
+                                        Placeholder="Все аутентифицированные пользователи"
+                                        style="width:100%" Name="Roles" />
+                    </ChildContent>
+                </RadzenFormField>
+
+                <RadzenFormField Text="Активен" Variant="Variant.Filled">
+                    <ChildContent>
+                        <RadzenCheckBox TValue="bool" @bind-Value="@model.IsActive" Name="IsActive" />
+                    </ChildContent>
+                </RadzenFormField>
+
+            </RadzenStack>
+
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center"
+                         JustifyContent="JustifyContent.End" Gap="0.5rem">
+                <RadzenButton ButtonType="ButtonType.Submit" Icon="save"
+                              Text="Сохранить" Variant="Variant.Flat" />
+                <RadzenButton ButtonStyle="ButtonStyle.Light" Text="Отмена"
+                              Click="@CancelClick" Variant="Variant.Flat" />
+            </RadzenStack>
+
+        </RadzenTemplateForm>
+    </RadzenColumn>
+</RadzenRow>

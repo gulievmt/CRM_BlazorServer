@@ -1,0 +1,85 @@
+@page "/admin/menu"
+@attribute [Authorize(Roles = "Sales Manager")]
+@using CRMBlazorServerRBS.Models.Menu
+
+<PageTitle>Menu Administration</PageTitle>
+
+<RadzenStack>
+    <RadzenRow AlignItems="AlignItems.Center">
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenText Text="Menu Administration" TextStyle="TextStyle.H3" TagName="TagName.H1" style="margin: 0" />
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center"
+                         JustifyContent="JustifyContent.End" Gap="0.5rem">
+                <RadzenButton Icon="add_circle_outline" Text="Add" Click="@AddClick" Variant="Variant.Flat" />
+            </RadzenStack>
+        </RadzenColumn>
+    </RadzenRow>
+
+    <RadzenAlert Size="AlertSize.Large" Shade="Shade.Light" AlertStyle="AlertStyle.Danger"
+                 Variant="Variant.Flat" Title="Error" Visible="@errorVisible">@error</RadzenAlert>
+
+    <RadzenRow>
+        <RadzenColumn SizeMD="12">
+            <RadzenDataGrid @ref="grid0" Data="@menuItems" TItem="MenuItem"
+                            AllowFiltering="true" AllowPaging="true" ShowPagingSummary="true"
+                            PageSizeOptions="@(new int[]{ 10, 20, 50 })" AllowSorting="true"
+                            RowSelect="@EditClick">
+                <Columns>
+                    <RadzenDataGridColumn TItem="MenuItem" Property="Id" Title="ID" Width="60px" />
+                    <RadzenDataGridColumn TItem="MenuItem" Property="Text" Title="Текст" />
+                    <RadzenDataGridColumn TItem="MenuItem" Property="Path" Title="Path" />
+                    <RadzenDataGridColumn TItem="MenuItem" Property="Icon" Title="Иконка" Width="140px">
+                        <Template Context="item">
+                            @if (!string.IsNullOrEmpty(item.Icon))
+                            {
+                                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="4px">
+                                    <RadzenIcon Icon="@item.Icon" />
+                                    <span>@item.Icon</span>
+                                </RadzenStack>
+                            }
+                        </Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="MenuItem" Property="ParentId" Title="Родитель" Width="140px">
+                        <Template Context="item">
+                            @(item.ParentId.HasValue
+                                ? (menuItems.FirstOrDefault(m => m.Id == item.ParentId.Value)?.Text ?? "?")
+                                : "— верхний уровень —")
+                        </Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="MenuItem" Property="SortOrder" Title="Порядок" Width="90px" />
+                    <RadzenDataGridColumn TItem="MenuItem" Property="IsActive" Title="Активен" Width="90px" TextAlign="TextAlign.Center">
+                        <Template Context="item">
+                            <RadzenCheckBox TValue="bool" Value="@item.IsActive" Disabled="true" />
+                        </Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="MenuItem" Title="Роли" Filterable="false" Sortable="false">
+                        <Template Context="item">
+                            @if (item.AllowedRoles.Count == 0)
+                            {
+                                <RadzenBadge Text="Все пользователи" BadgeStyle="BadgeStyle.Success" Shade="Shade.Lighter" />
+                            }
+                            else
+                            {
+                                @foreach (var role in item.AllowedRoles)
+                                {
+                                    <RadzenBadge Text="@role" BadgeStyle="BadgeStyle.Info" Shade="Shade.Lighter"
+                                                 style="margin-right:4px; margin-bottom:2px;" />
+                                }
+                            }
+                        </Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="MenuItem" Filterable="false" Sortable="false"
+                                         TextAlign="TextAlign.Center" Width="70px">
+                        <Template Context="item">
+                            <RadzenButton ButtonStyle="ButtonStyle.Danger" Icon="delete"
+                                          Size="ButtonSize.Small" Variant="Variant.Flat" Shade="Shade.Lighter"
+                                          Click="@(() => DeleteClick(item))" @onclick:stopPropagation="true" />
+                        </Template>
+                    </RadzenDataGridColumn>
+                </Columns>
+            </RadzenDataGrid>
+        </RadzenColumn>
+    </RadzenRow>
+</RadzenStack>
