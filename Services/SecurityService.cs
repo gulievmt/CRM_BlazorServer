@@ -52,7 +52,7 @@ namespace CRMBlazorServerRBS
                                UserManager<ApplicationUser> userManager)
         {
             this.securitDbContext = securitContext;
-            this.baseUri = new Uri($"{navigationManager.BaseUri}odata/Identity/");
+            this.baseUri = new Uri($"{navigationManager.BaseUri}api/Identity/");
             this.httpClient = factory.CreateClient("CRMBlazorServerRBS");
             this.navigationManager = navigationManager;
             this._connection = connection;
@@ -148,7 +148,7 @@ namespace CRMBlazorServerRBS
         {
             var uri = new Uri(baseUri, $"ApplicationRoles");
 
-            var content = new StringContent(ODataJsonSerializer.Serialize(role), Encoding.UTF8, "application/json");
+            var content = new StringContent(JsonSerializer.Serialize(role), Encoding.UTF8, "application/json");
 
             var response = await httpClient.PostAsync(uri, content);
 
@@ -157,56 +157,15 @@ namespace CRMBlazorServerRBS
 
         public async Task<HttpResponseMessage> DeleteRole(string id)
         {
-            var uri = new Uri(baseUri, $"ApplicationRoles('{id}')");
+            var uri = new Uri(baseUri, $"ApplicationRoles/{id}");
 
             return await httpClient.DeleteAsync(uri);
         }
 
         public async Task<IEnumerable<ApplicationUser>> GetUsers()
         {
-            var roles = await _connection.QueryAsync<ApplicationUser>("SELECT * FROM [RadzenCRM].[dbo].[AspNetUsers]");
-            return roles.ToList();
-
-
-
-            var uri = new Uri(baseUri, $"ApplicationUsers");
-
-            
-
-            uri = uri.GetODataUri();
-
-            var response = await httpClient.GetAsync(uri);
-
-            var result = await response.ReadAsync<ODataServiceResult<ApplicationUser>>();
-
-            return result.Value;
-            /*
-SELECT TOP (1000) [Id]
-      ,[AccessFailedCount]
-      ,[ConcurrencyStamp]
-      ,[Email]
-      ,[EmailConfirmed]
-      ,[LockoutEnabled]
-      ,[LockoutEnd]
-      ,[NormalizedEmail]
-      ,[NormalizedUserName]
-      ,[PasswordHash]
-      ,[PhoneNumber]
-      ,[PhoneNumberConfirmed]
-      ,[SecurityStamp]
-      ,[TwoFactorEnabled]
-      ,[UserName]
-      ,[FirstName]
-      ,[LastName]
-      ,[Picture]
-  FROM [RadzenCRM].[dbo].[AspNetUsers]             
-             
-             
-             
-             */
-
-
-
+            var users = await _connection.QueryAsync<ApplicationUser>("SELECT * FROM [RadzenCRM].[dbo].[AspNetUsers]");
+            return users.ToList();
         }
 
         public async Task<ApplicationUser> CreateUser(ApplicationUser user)
