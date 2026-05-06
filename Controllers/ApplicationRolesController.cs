@@ -4,15 +4,14 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.OData.Query;
-using Microsoft.AspNetCore.OData.Routing.Controllers;
 using CRMBlazorServerRBS.Models;
 
 namespace CRMBlazorServerRBS.Controllers
 {
     [Authorize]
-    [Route("odata/Identity/ApplicationRoles")]
-    public partial class ApplicationRolesController : ODataController
+    [ApiController]
+    [Route("api/Identity/ApplicationRoles")]
+    public partial class ApplicationRolesController : ControllerBase
     {
        private readonly RoleManager<ApplicationRole> roleManager;
 
@@ -23,7 +22,6 @@ namespace CRMBlazorServerRBS.Controllers
 
        partial void OnRolesRead(ref IQueryable<ApplicationRole> roles);
 
-       [EnableQuery]
        [HttpGet]
        public IEnumerable<ApplicationRole> Get()
        {
@@ -54,15 +52,15 @@ namespace CRMBlazorServerRBS.Controllers
                return BadRequest(new { error = new { message }});
            }
 
-           return Created($"odata/Identity/Roles('{role.Id}')", role);
+           return Created($"api/Identity/ApplicationRoles/{role.Id}", role);
        }
 
        partial void OnRoleDeleted(ApplicationRole role);
 
-       [HttpDelete("{Id}")]
-       public async Task<IActionResult> Delete(string key)
+       [HttpDelete("{id}")]
+       public async Task<IActionResult> Delete(string id)
        {
-           var role = await roleManager.FindByIdAsync(key);
+           var role = await roleManager.FindByIdAsync(id);
 
            if (role == null)
            {

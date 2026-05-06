@@ -5,11 +5,6 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.OData.Query;
-using Microsoft.AspNetCore.OData.Routing.Controllers;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.OData.Results;
-using Microsoft.AspNetCore.OData.Deltas;
 using System.ComponentModel.DataAnnotations.Schema;
 
 using CRMBlazorServerRBS.Data;
@@ -18,12 +13,12 @@ using CRMBlazorServerRBS.Models;
 namespace CRMBlazorServerRBS.Controllers
 {
     [Authorize]
-    [Route("odata/Identity/ApplicationUsers")]
-    public partial class ApplicationUsersController : ODataController
+    [ApiController]
+    [Route("api/Identity/ApplicationUsers")]
+    public partial class ApplicationUsersController : ControllerBase
     {
         private readonly ApplicationIdentityDbContext context;
         private readonly UserManager<ApplicationUser> userManager;
-
 
         public ApplicationUsersController(ApplicationIdentityDbContext context, UserManager<ApplicationUser> userManager)
         {
@@ -33,7 +28,6 @@ namespace CRMBlazorServerRBS.Controllers
 
         partial void OnUsersRead(ref IQueryable<ApplicationUser> users);
 
-        [EnableQuery]
         [HttpGet]
         public IEnumerable<ApplicationUser> Get()
         {
@@ -43,21 +37,25 @@ namespace CRMBlazorServerRBS.Controllers
             return users;
         }
 
-        [EnableQuery]
-        [HttpGet("{Id}")]
-        public SingleResult<ApplicationUser> GetApplicationUser(string key)
+        [HttpGet("{id}")]
+        public ActionResult<ApplicationUser> GetApplicationUser(string id)
         {
-            var user = context.Users.Where(i => i.Id == key);
+            var user = context.Users.Where(i => i.Id == id).FirstOrDefault();
 
-            return SingleResult.Create(user);
+            if (user == null)
+            {
+                return NotFound();
+            }
+
+            return user;
         }
 
         partial void OnUserDeleted(ApplicationUser user);
 
-        [HttpDelete("{Id}")]
-        public async Task<IActionResult> Delete(string key)
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(string id)
         {
-            var user = await userManager.FindByIdAsync(key);
+            var user = await userManager.FindByIdAsync(id);
 
             if (user == null)
             {
@@ -78,10 +76,10 @@ namespace CRMBlazorServerRBS.Controllers
 
         partial void OnUserUpdated(ApplicationUser user);
 
-        [HttpPatch("{Id}")]
-        public async Task<IActionResult> Patch(string key, [FromBody]ApplicationUser data)
+        [HttpPatch("{id}")]
+        public async Task<IActionResult> Patch(string id, [FromBody] ApplicationUser data)
         {
-            var user = await userManager.FindByIdAsync(key);
+            var user = await userManager.FindByIdAsync(id);
 
             if (user == null)
             {
@@ -100,7 +98,7 @@ namespace CRMBlazorServerRBS.Controllers
             {
                 result = await userManager.RemoveFromRolesAsync(user, await userManager.GetRolesAsync(user));
 
-                if (result.Succeeded) 
+                if (result.Succeeded)
                 {
                     result = await userManager.AddToRolesAsync(user, data.Roles.Select(r => r.Name));
                 }
@@ -158,7 +156,7 @@ namespace CRMBlazorServerRBS.Controllers
             {
                 OnUserCreated(user);
 
-                return Created($"odata/Identity/Users('{user.Id}')", user);
+                return Created($"api/Identity/ApplicationUsers/{user.Id}", user);
             }
             else
             {
