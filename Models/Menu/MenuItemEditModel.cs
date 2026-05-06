@@ -15,6 +15,13 @@ namespace CRMBlazorServerRBS.Models.Menu
         public int? ParentId { get; set; }
         public int SortOrder { get; set; }
         public bool IsActive { get; set; } = true;
-        public List<string> SelectedRoles { get; set; } = new();
+        public List<MenuItemRoleAssignment> SelectedRoles { get; set; } = new();
+    }
+
+    public class MenuItemRoleAssignment
+    {
+        public string RoleName { get; set; }
+        public string Scope { get; set; } = "all";
+        public string Permission { get; set; } = "read";
     }
 }

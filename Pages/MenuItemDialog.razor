@@ -21,7 +21,7 @@
                     </Helper>
                 </RadzenFormField>
 
-                <RadzenFormField Text="Path (URL, пусто для групп)" Variant="Variant.Filled">
+                <RadzenFormField Text="Path (URL, пусто для групп)" Visible="!HasChildren" Variant="Variant.Filled">
                     <ChildContent>
                         <RadzenTextBox style="width:100%" @bind-Value="@model.Path" Name="Path" />
                     </ChildContent>
@@ -55,22 +55,81 @@
                     </ChildContent>
                 </RadzenFormField>
 
-                <RadzenFormField Text="Разрешённые роли (пусто = все пользователи)" Variant="Variant.Filled">
-                    <ChildContent>
-                        <RadzenDropDown TValue="IEnumerable<string>"
-                                        @bind-Value="@selectedRoles"
-                                        Data="@availableRoles"
-                                        Multiple="true" AllowClear="true"
-                                        Placeholder="Все аутентифицированные пользователи"
-                                        style="width:100%" Name="Roles" />
-                    </ChildContent>
-                </RadzenFormField>
+                <RadzenStack Gap="0.25rem" Visible="!HasChildren">
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center"
+                                 JustifyContent="JustifyContent.SpaceBetween">
+                        <RadzenText TextStyle="TextStyle.Subtitle2" style="margin:0;">
+                            Разрешённые роли
+                            <span style="font-weight:400; color:var(--rz-text-disabled-color);">
+                                (пусто = никому не видно)
+                            </span>
+                        </RadzenText>
+                        <RadzenButton Icon="add" Text="Добавить роль" Size="ButtonSize.Small"
+                                      Variant="Variant.Text" ButtonStyle="ButtonStyle.Primary"
+                                      Click="@AddRoleAssignment" />
+                    </RadzenStack>
 
-                <RadzenFormField Text="Активен" Variant="Variant.Filled">
-                    <ChildContent>
-                        <RadzenCheckBox TValue="bool" @bind-Value="@model.IsActive" Name="IsActive" />
-                    </ChildContent>
-                </RadzenFormField>
+                    @if (model.SelectedRoles.Count == 0)
+                    {
+                        <RadzenAlert AlertStyle="AlertStyle.Warning" Shade="Shade.Lighter"
+                                     Variant="Variant.Flat" Size="AlertSize.Small" ShowIcon="true"
+                                     style="margin:0;">
+                            Пункт меню скрыт для всех пользователей
+                        </RadzenAlert>
+                    }
+                    else
+                    {
+                        <RadzenStack Gap="0.4rem">
+                            @* Header row *@
+                            <RadzenRow style="padding: 0 0.25rem;">
+                                <RadzenColumn SizeMD="4">
+                                    <RadzenText TextStyle="TextStyle.Caption" style="color:var(--rz-text-disabled-color);">Роль</RadzenText>
+                                </RadzenColumn>
+                                <RadzenColumn SizeMD="3">
+                                    <RadzenText TextStyle="TextStyle.Caption" style="color:var(--rz-text-disabled-color);">Scope</RadzenText>
+                                </RadzenColumn>
+                                <RadzenColumn SizeMD="4">
+                                    <RadzenText TextStyle="TextStyle.Caption" style="color:var(--rz-text-disabled-color);">Permission</RadzenText>
+                                </RadzenColumn>
+                                <RadzenColumn SizeMD="1" />
+                            </RadzenRow>
+
+                            @foreach (var assignment in model.SelectedRoles)
+                            {
+                                <RadzenRow AlignItems="AlignItems.Center" style="background:var(--rz-base-background-color); border-radius:4px; padding:0.25rem;">
+                                    <RadzenColumn SizeMD="4">
+                                        <RadzenDropDown TValue="string" @bind-Value="assignment.RoleName"
+                                                        Data="@availableRoles"
+                                                        Placeholder="Выберите роль"
+                                                        style="width:100%" />
+                                    </RadzenColumn>
+                                    <RadzenColumn SizeMD="3">
+                                        <RadzenDropDown TValue="string" @bind-Value="assignment.Scope"
+                                                        Data="@ScopeOptions" TextProperty="Label" ValueProperty="Value"
+                                                        style="width:100%" />
+                                    </RadzenColumn>
+                                    <RadzenColumn SizeMD="4">
+                                        <RadzenDropDown TValue="string" @bind-Value="assignment.Permission"
+                                                        Data="@PermissionOptions" TextProperty="Label" ValueProperty="Value"
+                                                        style="width:100%" />
+                                    </RadzenColumn>
+                                    <RadzenColumn SizeMD="1">
+                                        <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger"
+                                                      Size="ButtonSize.Small" Variant="Variant.Text"
+                                                      Click="@(() => RemoveRoleAssignment(assignment))" />
+                                    </RadzenColumn>
+                                </RadzenRow>
+                            }
+                        </RadzenStack>
+                    }
+                </RadzenStack>
+
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center"
+                             Gap="0.75rem" style="padding: 0.5rem 0;">
+                    <RadzenSwitch @bind-Value="@model.IsActive" Name="IsActive" />
+                    <RadzenLabel Text="@(model.IsActive ? "Активен" : "Неактивен")"
+                                 style="@($"font-weight:500; color:{(model.IsActive ? "var(--rz-success)" : "var(--rz-text-disabled-color)")}")" />
+                </RadzenStack>
 
             </RadzenStack>
 

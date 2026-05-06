@@ -25,10 +25,32 @@
             <RadzenDataGrid @ref="grid0" Data="@menuItems" TItem="MenuItem"
                             AllowFiltering="true" AllowPaging="true" ShowPagingSummary="true"
                             PageSizeOptions="@(new int[]{ 10, 20, 50 })" AllowSorting="true"
-                            RowSelect="@EditClick">
+                            SelectionMode="DataGridSelectionMode.Single"
+                            AllowRowSelectOnRowClick="true"
+                            RowSelect="EditClick"
+                            @bind-Value=@selectedItems">
                 <Columns>
                     <RadzenDataGridColumn TItem="MenuItem" Property="Id" Title="ID" Width="60px" />
-                    <RadzenDataGridColumn TItem="MenuItem" Property="Text" Title="Текст" />
+                    <RadzenDataGridColumn TItem="MenuItem" Property="Text" Title="Структура меню" MinWidth="200px">
+                        <Template Context="item">
+                            @if (item.ParentId == null)
+                            {
+                                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="6px">
+                                    <RadzenIcon Icon="@item.IconName" style="background-color:yellow;  color:var(--rz-primary); font-size:1rem;" />
+                                    <strong>@item.Text</strong>
+                                </RadzenStack>
+                            }
+                            else
+                            {
+                                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="6px"
+                                             style="padding-left:1.5rem;">
+                                    <span style="color:var(--rz-text-disabled-color); font-size:0.9rem;">└</span>
+                                    <RadzenIcon Icon="article" style="color:var(--rz-text-secondary-color); font-size:1rem;" />
+                                    <span>@item.Text</span>
+                                </RadzenStack>
+                            }
+                        </Template>
+                    </RadzenDataGridColumn>
                     <RadzenDataGridColumn TItem="MenuItem" Property="Path" Title="Path" />
                     <RadzenDataGridColumn TItem="MenuItem" Property="Icon" Title="Иконка" Width="140px">
                         <Template Context="item">
@@ -41,32 +63,31 @@
                             }
                         </Template>
                     </RadzenDataGridColumn>
-                    <RadzenDataGridColumn TItem="MenuItem" Property="ParentId" Title="Родитель" Width="140px">
-                        <Template Context="item">
-                            @(item.ParentId.HasValue
-                                ? (menuItems.FirstOrDefault(m => m.Id == item.ParentId.Value)?.Text ?? "?")
-                                : "— верхний уровень —")
-                        </Template>
-                    </RadzenDataGridColumn>
                     <RadzenDataGridColumn TItem="MenuItem" Property="SortOrder" Title="Порядок" Width="90px" />
                     <RadzenDataGridColumn TItem="MenuItem" Property="IsActive" Title="Активен" Width="90px" TextAlign="TextAlign.Center">
                         <Template Context="item">
                             <RadzenCheckBox TValue="bool" Value="@item.IsActive" Disabled="true" />
                         </Template>
                     </RadzenDataGridColumn>
-                    <RadzenDataGridColumn TItem="MenuItem" Title="Роли" Filterable="false" Sortable="false">
+                    <RadzenDataGridColumn TItem="MenuItem" Title="Роли / Scope / Permission"
+                                         Filterable="false" Sortable="false" MinWidth="220px">
                         <Template Context="item">
                             @if (item.AllowedRoles.Count == 0)
                             {
-                                <RadzenBadge Text="Все пользователи" BadgeStyle="BadgeStyle.Success" Shade="Shade.Lighter" />
+                                <RadzenBadge Text="Никто" BadgeStyle="BadgeStyle.Danger" Shade="Shade.Lighter" />
                             }
                             else
                             {
-                                @foreach (var role in item.AllowedRoles)
-                                {
-                                    <RadzenBadge Text="@role" BadgeStyle="BadgeStyle.Info" Shade="Shade.Lighter"
-                                                 style="margin-right:4px; margin-bottom:2px;" />
-                                }
+                                <RadzenStack Gap="3px">
+                                    @foreach (var r in item.AllowedRoles)
+                                    {
+                                        <RadzenStack Orientation="Orientation.Horizontal" Gap="3px" AlignItems="AlignItems.Center">
+                                            <RadzenBadge Text="@r.RoleName" BadgeStyle="BadgeStyle.Info" Shade="Shade.Lighter" />
+                                            <RadzenBadge Text="@ScopeLabel(r.Scope)" BadgeStyle="BadgeStyle.Light" Shade="Shade.Default" />
+                                            <RadzenBadge Text="@PermissionLabel(r.Permission)" BadgeStyle="BadgeStyle.Success" Shade="Shade.Lighter" />
+                                        </RadzenStack>
+                                    }
+                                </RadzenStack>
                             }
                         </Template>
                     </RadzenDataGridColumn>

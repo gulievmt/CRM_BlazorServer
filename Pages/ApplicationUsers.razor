@@ -19,7 +19,7 @@
             <RadzenDataGrid @ref="grid0" AllowFiltering="true" AllowPaging="true" ShowPagingSummary="true" PageSizeOptions=@(new int[]{5, 10, 20, 30}) AllowSorting="true" Data="@users"
                 TItem="CRMBlazorServerRBS.Models.ApplicationUser" RowSelect="@RowSelect">
                 <Columns>
-                    <RadzenDataGridColumn TItem="CRMBlazorServerRBS.Models.ApplicationUser" Property="IsWindowsUser" Width="115px" TextAlign="TextAlign.Center" Filterable="true" Sortable="true">
+                    <RadzenDataGridColumn TItem="CRMBlazorServerRBS.Models.ApplicationUser" Property="IsWindowsUser" Width="60px" TextAlign="TextAlign.Center" Filterable="true" Sortable="true">
                         <HeaderTemplate>
                             <RadzenIcon Icon="badge" title="Тип пользователя: AD или локальный"
                                         Style="font-size:1.2rem; color:var(--rz-text-secondary-color); vertical-align:middle;" />
@@ -35,14 +35,34 @@
                             }
                         </Template>
                         <FilterTemplate Context="col">
-                            <RadzenSelectBar @bind-Value="@userTypeFilter" TValue="string" Size="ButtonSize.Small"
-                                             Change="@(_ => { col.FilterValue = userTypeFilter switch { \"ad\" => (bool?)true, \"local\" => (bool?)false, _ => null }; grid0.Reload(); })">
-                                <Items>
-                                    <RadzenSelectBarItem Value="all"   Icon="filter_list" title="Все" />
-                                    <RadzenSelectBarItem Value="local" Icon="person"      title="Локальный" />
-                                    <RadzenSelectBarItem Value="ad"    Icon="computer"    title="Active Directory" />
-                                </Items>
-                            </RadzenSelectBar>
+                            <RadzenDropDown TValue="string"
+                                            @bind-Value="@userTypeFilter"
+                                            Data="@UserTypeOptions"
+                                            TextProperty="Label"
+                                            ValueProperty="Value"
+                                            Change="@(_ => {
+                                                col.FilterValue = userTypeFilter switch {
+                                                    "ad"    => (bool?)true,
+                                                    "local" => (bool?)false,
+                                                    _       => null
+                                                };
+                                                grid0.Reload();
+                                            })"
+                                             Style="min-width:250px;"
+                                            >
+                                <ValueTemplate Context="opt">
+                                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="4px">
+                                        <RadzenIcon Icon="@opt.Icon" Style="font-size:1rem;" />
+                                        <span>@opt.Label</span>
+                                    </RadzenStack>
+                                </ValueTemplate>
+                                <Template Context="opt">
+                                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="6px">
+                                        <RadzenIcon Icon="@opt.Icon" Style="font-size:1rem;" />
+                                        <span>@opt.Label</span>
+                                    </RadzenStack>
+                                </Template>
+                            </RadzenDropDown>
                         </FilterTemplate>
                     </RadzenDataGridColumn>
                     <RadzenDataGridColumn TItem="CRMBlazorServerRBS.Models.ApplicationUser" Property="UserName" Title="User Name" />

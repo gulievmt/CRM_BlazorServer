@@ -11,9 +11,8 @@
 
         public async Task InvokeAsync(HttpContext context)
         {
-            
-
-            var ip = context.Connection.RemoteIpAddress?.ToString();
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            var ip = context.Connection.RemoteIpAddress?.ToString() + "   id = "+ context.Connection.Id;
             Console.WriteLine($"Client IP: {ip}");
 
             // Передаём управление дальше по пайплайну

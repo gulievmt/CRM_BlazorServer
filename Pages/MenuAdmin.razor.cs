@@ -22,6 +22,7 @@ namespace CRMBlazorServerRBS.Pages
         [Inject] protected MenuService MenuService { get; set; }
 
         protected List<MenuItem> menuItems = new();
+        public IList<MenuItem> selectedItems = new List<MenuItem>();
         protected RadzenDataGrid<MenuItem> grid0;
         protected string error;
         protected bool errorVisible;
@@ -29,11 +30,26 @@ namespace CRMBlazorServerRBS.Pages
         protected override async Task OnInitializedAsync()
         {
             await Reload();
+            selectedItems = new List<MenuItem>() { menuItems.FirstOrDefault() };
         }
 
         private async Task Reload()
         {
-            menuItems = await MenuService.GetAllMenuItemsFlatAsync();
+            var flat = await MenuService.GetAllMenuItemsFlatAsync();
+
+            // Build hierarchical order: each top-level item followed by its children
+            var ordered = new List<MenuItem>();
+            foreach (var parent in flat.Where(m => m.ParentId == null).OrderBy(m => m.SortOrder))
+            {
+                ordered.Add(parent);
+                var children = flat.Where(m => m.ParentId == parent.Id).OrderBy(m => m.SortOrder);
+                parent.HasChildren = children.Any();
+                ordered.AddRange(children);
+            }
+            // Append any orphaned children that didn't match a parent
+            ordered.AddRange(flat.Where(m => m.ParentId != null && !ordered.Contains(m)));
+
+            menuItems = ordered;
         }
 
         protected async Task AddClick()
@@ -47,6 +63,8 @@ namespace CRMBlazorServerRBS.Pages
                 });
             await Reload();
             await grid0.Reload();
+
+
         }
 
         protected async Task EditClick(MenuItem item)
@@ -58,9 +76,36 @@ namespace CRMBlazorServerRBS.Pages
                     { "MenuItemId", item.Id },
                     { "AllMenuItems", menuItems }
                 });
-            await Reload();
+           // await Reload();
             await grid0.Reload();
+
+            var menuItem_new = await MenuService.GetMenuItemByIdAsync(item.Id);
+
+
+//            item.Text = menuItem_new.Text;
+            item.CopyFrom( menuItem_new);
+
+            selectedItems = new List<MenuItem>() { item };
+            //             selectedItems = new List<MenuItem>() { menuItems.FirstOrDefault() };
+
         }
+
+
+        protected static string ScopeLabel(string scope) => scope switch
+        {
+            "own"            => "Свои",
+            "directreportees"=> "Подчинённые",
+            "branch"         => "Филиал",
+            "department"     => "Отдел",
+            _                => "Все"
+        };
+
+        protected static string PermissionLabel(string permission) => permission switch
+        {
+            "readwrite" => "Чтение/Запись",
+            "approve"   => "Утверждение",
+            _           => "Чтение"
+        };
 
         protected async Task DeleteClick(MenuItem item)
         {

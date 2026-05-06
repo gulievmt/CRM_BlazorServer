@@ -100,7 +100,14 @@ namespace CRMBlazorServerRBS.Pages
                 }
 
                 user.Roles = roles.Where(role => userRoles.Contains(role.Id)).ToList();
-                await Security.CreateUser(user);
+                try
+                {
+                    await Security.CreateUser(user);
+                }
+                catch(Exception ex)
+                {
+                    throw;
+                }
                 DialogService.Close(null);
             }
             catch (Exception ex)

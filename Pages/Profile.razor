@@ -47,7 +47,7 @@
                 </RadzenStack>
             </RadzenTemplateForm>
         </RadzenTabsItem>
-        <RadzenTabsItem Text="Password" Selected="false">
+        <RadzenTabsItem Text="Password" Selected="false" Visible="@( user != null && !user.IsWindowsUser)">
             <RadzenTemplateForm Method="post" Submit="@FormSubmit" TItem="CRMBlazorServerRBS.Models.ApplicationUser" Data="@user"
                 Visible="@(user != null)">
                 <RadzenAlert Size="AlertSize.Large" Shade="Shade.Light" AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" Title="Cannot change password" Visible="@errorVisible">@error</RadzenAlert>

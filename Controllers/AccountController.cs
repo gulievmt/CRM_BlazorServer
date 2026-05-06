@@ -259,6 +259,8 @@ namespace CRMBlazorServerRBS.Controllers
                         Sid                = newSid,
                         user.Id
                     });
+
+                user = await FindUserBySidAsync(currentSid);
             }
 
             await signInManager.SignInAsync(user, isPersistent: false);

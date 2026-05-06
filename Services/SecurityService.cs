@@ -233,23 +233,17 @@ SELECT TOP (1000) [Id]
 
         public async Task<ApplicationUser> GetUserById(string id)
         {
-            // AsNoTracking: the returned entity and any navigation properties it touches
-            // are NOT added to the EF change tracker, preventing role-tracking conflicts
-            // when UpdateUser is called later in the same Blazor Server circuit.
-            var usr = securitDbContext.ApplicationUser
-                .AsNoTracking()
-                .Where(u => u.Id == id)
-                .FirstOrDefault();
+            var usr = await _connection.QueryFirstOrDefaultAsync<ApplicationUser>(
+                "SELECT * FROM [dbo].[AspNetUsers] WHERE Id = @Id", new { Id = id });
+
             if (usr == null) return null;
 
-            // Load roles via Dapper — separate query, no EF tracking involved
-            var userRoles = await _connection.QueryAsync<ApplicationRole>(@"
+            usr.Roles = (await _connection.QueryAsync<ApplicationRole>(@"
                 SELECT r.Id, r.Name
                 FROM [dbo].[AspNetRoles] r
                 INNER JOIN [dbo].[AspNetUserRoles] ur ON ur.RoleId = r.Id
-                WHERE ur.UserId = @UserId", new { UserId = id });
+                WHERE ur.UserId = @UserId", new { UserId = id })).ToList();
 
-            usr.Roles = userRoles.ToList();
             return usr;
         }
 
