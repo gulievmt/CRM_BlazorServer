@@ -168,6 +168,103 @@ namespace CRMBlazorServerRBS
             return users.ToList();
         }
 
+        public async Task<(IEnumerable<ApplicationUser> Users, int Total)> GetUsersPagedAsync(
+            IEnumerable<FilterDescriptor> filters,
+            IEnumerable<SortDescriptor> sorts,
+            int skip, int top)
+        {
+            var parameters = new DynamicParameters();
+            var where    = BuildWhereClause(filters, parameters);
+            var orderBy  = BuildOrderByClause(sorts);
+
+            var whereStr   = string.IsNullOrEmpty(where)    ? "" : $" WHERE {where}";
+            var orderByStr = string.IsNullOrEmpty(orderBy)  ? "[UserName] ASC" : orderBy;
+
+            var countSql = $"SELECT COUNT(*) FROM [dbo].[AspNetUsers]{whereStr}";
+            var dataSql  = $@"SELECT * FROM [dbo].[AspNetUsers]{whereStr}
+                              ORDER BY {orderByStr}
+                              OFFSET {skip} ROWS FETCH NEXT {top} ROWS ONLY";
+
+            var total = await _connection.ExecuteScalarAsync<int>(countSql, parameters);
+            var users = await _connection.QueryAsync<ApplicationUser>(dataSql, parameters);
+
+            return (users.ToList(), total);
+        }
+
+        private static string BuildWhereClause(IEnumerable<FilterDescriptor> filters, DynamicParameters parameters)
+        {
+            if (filters == null) return null;
+
+            var parts = new List<string>();
+            int i = 0;
+
+            foreach (var f in filters)
+            {
+                bool needsValue = f.FilterOperator is not (
+                    FilterOperator.IsNull or FilterOperator.IsNotNull or
+                    FilterOperator.IsEmpty or FilterOperator.IsNotEmpty);
+
+                if (needsValue && f.FilterValue == null) continue;
+
+                var firstPart = FilterToSql(f.Property, f.FilterOperator, f.FilterValue, parameters, ref i);
+
+                string part;
+                if (f.SecondFilterValue != null)
+                {
+                    var secondPart = FilterToSql(f.Property, f.SecondFilterOperator, f.SecondFilterValue, parameters, ref i);
+                    var innerOp = f.LogicalFilterOperator == LogicalFilterOperator.Or ? "OR" : "AND";
+                    part = $"({firstPart} {innerOp} {secondPart})";
+                }
+                else
+                {
+                    part = firstPart;
+                }
+
+                parts.Add(part);
+            }
+
+            return parts.Count == 0 ? null : string.Join(" AND ", parts);
+        }
+
+        private static string FilterToSql(string property, FilterOperator op, object value,
+                                          DynamicParameters parameters, ref int i)
+        {
+            var col   = $"[{property}]";
+            var pName = $"@fp{i++}";
+
+            return op switch
+            {
+                FilterOperator.Equals             => Param($"{col} = {pName}",            pName, value,            parameters),
+                FilterOperator.NotEquals          => Param($"{col} != {pName}",           pName, value,            parameters),
+                FilterOperator.LessThan           => Param($"{col} < {pName}",            pName, value,            parameters),
+                FilterOperator.LessThanOrEquals   => Param($"{col} <= {pName}",           pName, value,            parameters),
+                FilterOperator.GreaterThan        => Param($"{col} > {pName}",            pName, value,            parameters),
+                FilterOperator.GreaterThanOrEquals=> Param($"{col} >= {pName}",           pName, value,            parameters),
+                FilterOperator.Contains           => Param($"{col} LIKE {pName}",         pName, $"%{value}%",     parameters),
+                FilterOperator.DoesNotContain     => Param($"{col} NOT LIKE {pName}",     pName, $"%{value}%",     parameters),
+                FilterOperator.StartsWith         => Param($"{col} LIKE {pName}",         pName, $"{value}%",      parameters),
+                FilterOperator.EndsWith           => Param($"{col} LIKE {pName}",         pName, $"%{value}",      parameters),
+                FilterOperator.IsNull             => $"{col} IS NULL",
+                FilterOperator.IsNotNull          => $"{col} IS NOT NULL",
+                FilterOperator.IsEmpty            => $"{col} = ''",
+                FilterOperator.IsNotEmpty         => $"({col} IS NOT NULL AND {col} != '')",
+                _                                 => Param($"{col} = {pName}",            pName, value,            parameters),
+            };
+        }
+
+        private static string Param(string sql, string pName, object value, DynamicParameters parameters)
+        {
+            parameters.Add(pName, value);
+            return sql;
+        }
+
+        private static string BuildOrderByClause(IEnumerable<SortDescriptor> sorts)
+        {
+            if (sorts == null || !sorts.Any()) return null;
+            return string.Join(", ", sorts.Select(s =>
+                $"[{s.Property}] {(s.SortOrder == SortOrder.Descending ? "DESC" : "ASC")}"));
+        }
+
         public async Task<ApplicationUser> CreateUser(ApplicationUser user)
         {
             var uri = new Uri(baseUri, $"ApplicationUsers");

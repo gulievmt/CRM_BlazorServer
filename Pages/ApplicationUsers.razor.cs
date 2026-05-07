@@ -31,6 +31,7 @@ namespace CRMBlazorServerRBS.Pages
         protected NotificationService NotificationService { get; set; }
 
         protected IEnumerable<CRMBlazorServerRBS.Models.ApplicationUser> users;
+        protected int count;
         protected RadzenDataGrid<CRMBlazorServerRBS.Models.ApplicationUser> grid0;
         protected string error;
         protected bool errorVisible;
@@ -49,23 +50,32 @@ namespace CRMBlazorServerRBS.Pages
         [Inject]
         protected SecurityService Security { get; set; }
 
-        protected override async Task OnInitializedAsync()
+        protected async Task LoadData(LoadDataArgs args)
         {
-            users = await Security.GetUsers();
+            var result = await Security.GetUsersPagedAsync(
+                args.Filters, args.Sorts, args.Skip ?? 0, args.Top ?? 10);
+
+            users = result.Users;
+            count = result.Total;
+
+            await InvokeAsync(StateHasChanged);
+        }
+
+        private async Task ReloadUsers()
+        {
+            await grid0.Reload();
         }
 
         protected async Task AddClick()
         {
             await DialogService.OpenAsync<AddApplicationUser>("Add Application User");
-
-            users = await Security.GetUsers();
+            await ReloadUsers();
         }
 
         protected async Task RowSelect(CRMBlazorServerRBS.Models.ApplicationUser user)
         {
             await DialogService.OpenAsync<EditApplicationUser>("Edit Application User", new Dictionary<string, object>{ {"Id", user.Id} });
-
-            users = await Security.GetUsers();
+            await ReloadUsers();
         }
 
         protected async Task DeleteClick(CRMBlazorServerRBS.Models.ApplicationUser user)
@@ -75,8 +85,7 @@ namespace CRMBlazorServerRBS.Pages
                 if (await DialogService.Confirm("Are you sure you want to delete this user?") == true)
                 {
                     await Security.DeleteUser($"{user.Id}");
-
-                    users = await Security.GetUsers();
+                    await ReloadUsers();
                 }
             }
             catch (Exception ex)
