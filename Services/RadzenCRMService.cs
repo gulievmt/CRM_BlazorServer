@@ -1,16 +1,16 @@
+using CRMBlazorServerRBS.Models.RadzenCRM;
+using Dapper;
+using DocumentFormat.OpenXml.Drawing.Charts;
+using Microsoft.AspNetCore.Components;
+using Radzen;
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Linq;
 using System.Linq.Dynamic.Core;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.Text.Encodings.Web;
-using Microsoft.AspNetCore.Components;
-using Dapper;
-using Radzen;
-
-using CRMBlazorServerRBS.Models.RadzenCRM;
+using System.Threading.Tasks;
 using Task = System.Threading.Tasks.Task;
 
 namespace CRMBlazorServerRBS
@@ -28,22 +28,27 @@ namespace CRMBlazorServerRBS
 
         public void Reset() { }
 
+        private string ExportUrl(string path, string fileName, Query query = null)
+        {
+            var encodedName = string.IsNullOrEmpty(fileName) ? "Export" : UrlEncoder.Default.Encode(fileName);
+            var baseUrl = $"{path}(fileName='{encodedName}')";
+            return query != null ? query.ToUrl(baseUrl) : baseUrl;
+        }
+
+        private void NavigateToExport(string url) =>
+            navigationManager.NavigateTo(url, true);
 
         public async Task ExportContactsToExcel(Query query = null, string fileName = null)
-        {
-            navigationManager.NavigateTo(query != null ? query.ToUrl($"export/radzencrm/contacts/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/contacts/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')", true);
-        }
+            => NavigateToExport(ExportUrl("export/radzencrm/contacts/excel", fileName, query));
 
         public async Task ExportContactsToCSV(Query query = null, string fileName = null)
-        {
-            navigationManager.NavigateTo(query != null ? query.ToUrl($"export/radzencrm/contacts/csv(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/contacts/csv(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')", true);
-        }
+            => NavigateToExport(ExportUrl("export/radzencrm/contacts/csv", fileName, query));
 
         partial void OnContactsRead(ref IQueryable<CRMBlazorServerRBS.Models.RadzenCRM.Contact> items);
 
         public async Task<IQueryable<CRMBlazorServerRBS.Models.RadzenCRM.Contact>> GetContacts(Query query = null)
         {
-            var contacts = await db.QueryAsync<CRMBlazorServerRBS.Models.RadzenCRM.Contact>(
+             var contacts = await db.QueryAsync<CRMBlazorServerRBS.Models.RadzenCRM.Contact>(
                 "SELECT * FROM [dbo].[Contacts]");
             var items = contacts.AsQueryable();
 
@@ -204,14 +209,10 @@ namespace CRMBlazorServerRBS
         }
 
         public async Task ExportOpportunitiesToExcel(Query query = null, string fileName = null)
-        {
-            navigationManager.NavigateTo(query != null ? query.ToUrl($"export/radzencrm/opportunities/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/opportunities/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')", true);
-        }
+            => NavigateToExport(ExportUrl("export/radzencrm/opportunities/excel", fileName, query));
 
         public async Task ExportOpportunitiesToCSV(Query query = null, string fileName = null)
-        {
-            navigationManager.NavigateTo(query != null ? query.ToUrl($"export/radzencrm/opportunities/csv(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/opportunities/csv(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')", true);
-        }
+            => NavigateToExport(ExportUrl("export/radzencrm/opportunities/csv", fileName, query));
 
         partial void OnOpportunitiesRead(ref IQueryable<CRMBlazorServerRBS.Models.RadzenCRM.Opportunity> items);
 
@@ -354,14 +355,10 @@ namespace CRMBlazorServerRBS
         }
 
         public async Task ExportOpportunityStatusesToExcel(Query query = null, string fileName = null)
-        {
-            navigationManager.NavigateTo(query != null ? query.ToUrl($"export/radzencrm/opportunitystatuses/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/opportunitystatuses/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')", true);
-        }
+            => NavigateToExport(ExportUrl("export/radzencrm/opportunitystatuses/excel", fileName, query));
 
         public async Task ExportOpportunityStatusesToCSV(Query query = null, string fileName = null)
-        {
-            navigationManager.NavigateTo(query != null ? query.ToUrl($"export/radzencrm/opportunitystatuses/csv(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/opportunitystatuses/csv(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')", true);
-        }
+            => NavigateToExport(ExportUrl("export/radzencrm/opportunitystatuses/csv", fileName, query));
 
         partial void OnOpportunityStatusesRead(ref IQueryable<CRMBlazorServerRBS.Models.RadzenCRM.OpportunityStatus> items);
 
@@ -473,14 +470,10 @@ namespace CRMBlazorServerRBS
         }
 
         public async Task ExportTasksToExcel(Query query = null, string fileName = null)
-        {
-            navigationManager.NavigateTo(query != null ? query.ToUrl($"export/radzencrm/tasks/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/tasks/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')", true);
-        }
+            => NavigateToExport(ExportUrl("export/radzencrm/tasks/excel", fileName, query));
 
         public async Task ExportTasksToCSV(Query query = null, string fileName = null)
-        {
-            navigationManager.NavigateTo(query != null ? query.ToUrl($"export/radzencrm/tasks/csv(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/tasks/csv(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')", true);
-        }
+            => NavigateToExport(ExportUrl("export/radzencrm/tasks/csv", fileName, query));
 
         partial void OnTasksRead(ref IQueryable<CRMBlazorServerRBS.Models.RadzenCRM.Task> items);
 
@@ -641,14 +634,10 @@ namespace CRMBlazorServerRBS
         }
 
         public async Task ExportTaskStatusesToExcel(Query query = null, string fileName = null)
-        {
-            navigationManager.NavigateTo(query != null ? query.ToUrl($"export/radzencrm/taskstatuses/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/taskstatuses/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')", true);
-        }
+            => NavigateToExport(ExportUrl("export/radzencrm/taskstatuses/excel", fileName, query));
 
         public async Task ExportTaskStatusesToCSV(Query query = null, string fileName = null)
-        {
-            navigationManager.NavigateTo(query != null ? query.ToUrl($"export/radzencrm/taskstatuses/csv(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/taskstatuses/csv(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')", true);
-        }
+            => NavigateToExport(ExportUrl("export/radzencrm/taskstatuses/csv", fileName, query));
 
         partial void OnTaskStatusesRead(ref IQueryable<CRMBlazorServerRBS.Models.RadzenCRM.TaskStatus> items);
 
@@ -760,14 +749,10 @@ namespace CRMBlazorServerRBS
         }
 
         public async Task ExportTaskTypesToExcel(Query query = null, string fileName = null)
-        {
-            navigationManager.NavigateTo(query != null ? query.ToUrl($"export/radzencrm/tasktypes/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/tasktypes/excel(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')", true);
-        }
+            => NavigateToExport(ExportUrl("export/radzencrm/tasktypes/excel", fileName, query));
 
         public async Task ExportTaskTypesToCSV(Query query = null, string fileName = null)
-        {
-            navigationManager.NavigateTo(query != null ? query.ToUrl($"export/radzencrm/tasktypes/csv(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')") : $"export/radzencrm/tasktypes/csv(fileName='{(!string.IsNullOrEmpty(fileName) ? UrlEncoder.Default.Encode(fileName) : "Export")}')", true);
-        }
+            => NavigateToExport(ExportUrl("export/radzencrm/tasktypes/csv", fileName, query));
 
         partial void OnTaskTypesRead(ref IQueryable<CRMBlazorServerRBS.Models.RadzenCRM.TaskType> items);
 

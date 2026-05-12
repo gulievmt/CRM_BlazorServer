@@ -54,7 +54,10 @@ namespace CRMBlazorServerRBS.Controllers
 
                 if (query.ContainsKey("$select"))
                 {
-                    return items.Select($"new ({query["$select"].ToString()})");
+                    var s = query["$select"];
+                    var q = $"new ({query["$select"].ToString()})";
+
+                    return items.Select(q);
                 }
             }
 
@@ -88,106 +91,176 @@ namespace CRMBlazorServerRBS.Controllers
 
         public FileStreamResult ToExcel(IQueryable query, string fileName = null)
         {
-            var columns = GetProperties(query.ElementType);
-            var stream = new MemoryStream();
+            var columns = GetProperties(query.ElementType).ToList();
+            var stream  = new MemoryStream();
 
+            // ── 1. Pre-collect rows into memory so we can measure column widths ──
+            // Each cell: (displayText, dataType, styleIndex, rawNumericText)
+            var dataRows = new List<List<(string Text, CellValues Type, uint Style, string Raw)>>();
+
+            foreach (var item in query)
+            {
+                var cells = new List<(string, CellValues, uint, string)>();
+                foreach (var col in columns)
+                {
+                    var value    = GetValue(item, col.Key);
+                    var strValue = $"{value}".Trim();
+
+                    var underlying = col.Value.IsGenericType &&
+                                     col.Value.GetGenericTypeDefinition() == typeof(Nullable<>)
+                                     ? Nullable.GetUnderlyingType(col.Value) : col.Value;
+                    var typeCode = Type.GetTypeCode(underlying);
+
+                    if (typeCode == TypeCode.DateTime && !string.IsNullOrWhiteSpace(strValue))
+                    {
+                        var oaDate = ((DateTime)value).ToOADate()
+                                          .ToString(CultureInfo.InvariantCulture);
+                        cells.Add((strValue, CellValues.Number, 1U, oaDate)); // style 1 = date
+                    }
+                    else if (typeCode == TypeCode.Boolean)
+                    {
+                        cells.Add((strValue, CellValues.Boolean, 3U, null));
+                    }
+                    else if (IsNumeric(typeCode))
+                    {
+                        var raw = value != null
+                                  ? Convert.ToString(value, CultureInfo.InvariantCulture) : "";
+                        cells.Add((raw, CellValues.Number, 3U, null));
+                    }
+                    else
+                    {
+                        cells.Add((strValue, CellValues.String, 3U, null));
+                    }
+                }
+                dataRows.Add(cells);
+            }
+
+            // ── 2. Calculate auto column widths (max content, capped at 55 chars ≈ 400 px) ──
+            const double MaxWidth = 55.0;
+            const double MinWidth = 8.0;
+            const double Padding  = 2.0;
+
+            var colWidths = columns.Select(c => (double)c.Key.Length).ToArray();
+            foreach (var row in dataRows)
+                for (int c = 0; c < row.Count; c++)
+                    colWidths[c] = Math.Max(colWidths[c], row[c].Text.Length);
+
+            for (int c = 0; c < colWidths.Length; c++)
+                colWidths[c] = Math.Min(Math.Max(colWidths[c] + Padding, MinWidth), MaxWidth);
+
+            // ── 3. Build the spreadsheet ──────────────────────────────────────
             using (var document = SpreadsheetDocument.Create(stream, SpreadsheetDocumentType.Workbook))
             {
                 var workbookPart = document.AddWorkbookPart();
                 workbookPart.Workbook = new Workbook();
 
                 var worksheetPart = workbookPart.AddNewPart<WorksheetPart>();
-                worksheetPart.Worksheet = new Worksheet();
+                var worksheet     = new Worksheet();
 
-                var workbookStylesPart = workbookPart.AddNewPart<WorkbookStylesPart>();
-                GenerateWorkbookStylesPartContent(workbookStylesPart);
+                var stylesPart = workbookPart.AddNewPart<WorkbookStylesPart>();
+                GenerateWorkbookStylesPartContent(stylesPart);
 
                 var sheets = workbookPart.Workbook.AppendChild(new Sheets());
-                var sheet = new Sheet() { Id = workbookPart.GetIdOfPart(worksheetPart), SheetId = 1, Name = "Sheet1" };
-                sheets.Append(sheet);
-
+                sheets.Append(new Sheet
+                {
+                    Id      = workbookPart.GetIdOfPart(worksheetPart),
+                    SheetId = 1,
+                    Name    = "Sheet1"
+                });
                 workbookPart.Workbook.Save();
 
-                var sheetData = worksheetPart.Worksheet.AppendChild(new SheetData());
-
-                var headerRow = new Row();
-
-                foreach (var column in columns)
+                // Column widths — must appear before SheetData
+                var colsElem = new Columns();
+                for (int c = 0; c < colWidths.Length; c++)
                 {
-                    headerRow.Append(new Cell()
+                    colsElem.Append(new Column
                     {
-                        CellValue = new CellValue(column.Key),
-                        DataType = new EnumValue<CellValues>(CellValues.String)
+                        Min         = (UInt32Value)(uint)(c + 1),
+                        Max         = (UInt32Value)(uint)(c + 1),
+                        Width       = colWidths[c],
+                        CustomWidth = true
                     });
                 }
+                worksheet.Append(colsElem);
 
+                // Freeze top header row
+                var sheetViews = new SheetViews();
+                var sheetView  = new SheetView { TabSelected = true, WorkbookViewId = 0U };
+                sheetView.Append(new Pane
+                {
+                    VerticalSplit    = 1,
+                    TopLeftCell      = "A2",
+                    ActivePane       = PaneValues.BottomLeft,
+                    State            = PaneStateValues.Frozen
+                });
+                sheetViews.Append(sheetView);
+                worksheet.InsertAt(sheetViews, 0);
+
+                var sheetData = worksheet.AppendChild(new SheetData());
+
+                // Header row — style 2 = bold white on blue, fixed height
+                var headerRow = new Row { RowIndex = 1U, Height = 20D, CustomHeight = true };
+                uint colIdx = 1;
+                foreach (var col in columns)
+                {
+                    headerRow.Append(new Cell
+                    {
+                        CellReference = GetCellRef(colIdx++, 1),
+                        CellValue     = new CellValue(col.Key),
+                        DataType      = new EnumValue<CellValues>(CellValues.String),
+                        StyleIndex    = 2U   // header style
+                    });
+                }
                 sheetData.AppendChild(headerRow);
 
-                foreach (var item in query)
+                // Data rows
+                uint rowIdx = 2;
+                foreach (var row in dataRows)
                 {
-                    var row = new Row();
-
-                    foreach (var column in columns)
+                    // CustomHeight=false → Excel auto-sizes height based on WrapText content
+                    var dataRow = new Row { RowIndex = rowIdx, CustomHeight = false };
+                    colIdx = 1;
+                    foreach (var cell in row)
                     {
-                        var value = GetValue(item, column.Key);
-                        var stringValue = $"{value}".Trim();
-
-                        var cell = new Cell();
-
-                        var underlyingType = column.Value.IsGenericType &&
-                            column.Value.GetGenericTypeDefinition() == typeof(Nullable<>) ?
-                            Nullable.GetUnderlyingType(column.Value) : column.Value;
-
-                        var typeCode = Type.GetTypeCode(underlyingType);
-
-                        if (typeCode == TypeCode.DateTime)
+                        var c = new Cell
                         {
-                            if (!string.IsNullOrWhiteSpace(stringValue))
-                            {
-                                cell.CellValue = new CellValue() { Text = ((DateTime)value).ToOADate().ToString(System.Globalization.CultureInfo.InvariantCulture) };
-                                cell.DataType = new EnumValue<CellValues>(CellValues.Number);
-                                cell.StyleIndex = (UInt32Value)1U;
-                            }
-                        }
-                        else if (typeCode == TypeCode.Boolean)
-                        {
-                            cell.CellValue = new CellValue(stringValue.ToLowerInvariant());
-                            cell.DataType = new EnumValue<CellValues>(CellValues.Boolean);
-                        }
-                        else if (IsNumeric(typeCode))
-                        {
-                            if (value != null)
-                            {
-                                stringValue = Convert.ToString(value, CultureInfo.InvariantCulture);
-                            }
-                            cell.CellValue = new CellValue(stringValue);
-                            cell.DataType = new EnumValue<CellValues>(CellValues.Number);
-                        }
-                        else
-                        {
-                            cell.CellValue = new CellValue(stringValue);
-                            cell.DataType = new EnumValue<CellValues>(CellValues.String);
-                        }
-
-                        row.Append(cell);
+                            CellReference = GetCellRef(colIdx++, rowIdx),
+                            DataType      = new EnumValue<CellValues>(cell.Type),
+                            StyleIndex    = cell.Style
+                        };
+                        c.CellValue = new CellValue(cell.Raw ?? cell.Text);
+                        dataRow.Append(c);
                     }
-
-                    sheetData.AppendChild(row);
+                    sheetData.AppendChild(dataRow);
+                    rowIdx++;
                 }
 
-
+                worksheetPart.Worksheet = worksheet;
+                worksheetPart.Worksheet.Save();
                 workbookPart.Workbook.Save();
             }
 
             if (stream?.Length > 0)
-            {
                 stream.Seek(0, SeekOrigin.Begin);
+
+            return new FileStreamResult(stream, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            {
+                FileDownloadName = (!string.IsNullOrEmpty(fileName) ? fileName : "Export") + ".xlsx"
+            };
+        }
+
+        // A1-style cell reference helper
+        private static string GetCellRef(uint col, uint row)
+        {
+            var colName = "";
+            var c = col;
+            while (c > 0)
+            {
+                c--;
+                colName = (char)('A' + c % 26) + colName;
+                c /= 26;
             }
-
-            var result = new FileStreamResult(stream, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-            result.FileDownloadName = (!string.IsNullOrEmpty(fileName) ? fileName : "Export") + ".xlsx";
-
-            return result;
+            return colName + row;
         }
 
 
@@ -254,108 +327,154 @@ namespace CRMBlazorServerRBS.Controllers
             }
         }
 
-        private static void GenerateWorkbookStylesPartContent(WorkbookStylesPart workbookStylesPart1)
+        private static void GenerateWorkbookStylesPartContent(WorkbookStylesPart part)
         {
-            Stylesheet stylesheet1 = new Stylesheet() { MCAttributes = new MarkupCompatibilityAttributes() { Ignorable = "x14ac x16r2 xr" } };
-            stylesheet1.AddNamespaceDeclaration("mc", "http://schemas.openxmlformats.org/markup-compatibility/2006");
-            stylesheet1.AddNamespaceDeclaration("x14ac", "http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac");
-            stylesheet1.AddNamespaceDeclaration("x16r2", "http://schemas.microsoft.com/office/spreadsheetml/2015/02/main");
-            stylesheet1.AddNamespaceDeclaration("xr", "http://schemas.microsoft.com/office/spreadsheetml/2014/revision");
+            // ── Fonts ──────────────────────────────────────────────────────
+            // 0: normal data  |  1: bold white (header)
+            var fonts = new Fonts { Count = 2U, KnownFonts = true };
 
-            Fonts fonts1 = new Fonts() { Count = (UInt32Value)1U, KnownFonts = true };
+            var fontNormal = new Font();
+            fontNormal.Append(new FontSize { Val = 11D });
+            fontNormal.Append(new Color { Theme = 1U });
+            fontNormal.Append(new FontName { Val = "Calibri" });
+            fontNormal.Append(new FontFamilyNumbering { Val = 2 });
+            fontNormal.Append(new FontScheme { Val = FontSchemeValues.Minor });
 
-            Font font1 = new Font();
-            FontSize fontSize1 = new FontSize() { Val = 11D };
-            Color color1 = new Color() { Theme = (UInt32Value)1U };
-            FontName fontName1 = new FontName() { Val = "Calibri" };
-            FontFamilyNumbering fontFamilyNumbering1 = new FontFamilyNumbering() { Val = 2 };
-            FontScheme fontScheme1 = new FontScheme() { Val = FontSchemeValues.Minor };
+            var fontHeader = new Font();
+            fontHeader.Append(new Bold());
+            fontHeader.Append(new FontSize { Val = 11D });
+            fontHeader.Append(new Color { Rgb = "FFFFFFFF" });   // white text
+            fontHeader.Append(new FontName { Val = "Calibri" });
+            fontHeader.Append(new FontFamilyNumbering { Val = 2 });
+            fontHeader.Append(new FontScheme { Val = FontSchemeValues.Minor });
 
-            font1.Append(fontSize1);
-            font1.Append(color1);
-            font1.Append(fontName1);
-            font1.Append(fontFamilyNumbering1);
-            font1.Append(fontScheme1);
+            fonts.Append(fontNormal);
+            fonts.Append(fontHeader);
 
-            fonts1.Append(font1);
+            // ── Fills ──────────────────────────────────────────────────────
+            // 0: none (required)  |  1: gray125 (required)  |  2: blue header bg
+            var fills = new Fills { Count = 3U };
 
-            Fills fills1 = new Fills() { Count = (UInt32Value)2U };
+            var fillNone = new Fill();
+            fillNone.Append(new PatternFill { PatternType = PatternValues.None });
 
-            Fill fill1 = new Fill();
-            PatternFill patternFill1 = new PatternFill() { PatternType = PatternValues.None };
+            var fillGray = new Fill();
+            fillGray.Append(new PatternFill { PatternType = PatternValues.Gray125 });
 
-            fill1.Append(patternFill1);
+            var fillBlue = new Fill();
+            var patBlue  = new PatternFill { PatternType = PatternValues.Solid };
+            patBlue.Append(new ForegroundColor { Rgb = "FF2F75B6" });  // #2F75B6
+            patBlue.Append(new BackgroundColor { Indexed = 64U });
+            fillBlue.Append(patBlue);
 
-            Fill fill2 = new Fill();
-            PatternFill patternFill2 = new PatternFill() { PatternType = PatternValues.Gray125 };
+            fills.Append(fillNone);
+            fills.Append(fillGray);
+            fills.Append(fillBlue);
 
-            fill2.Append(patternFill2);
+            // ── Borders ────────────────────────────────────────────────────
+            // 0: none  |  1: thin all-around
+            var borders = new Borders { Count = 2U };
 
-            fills1.Append(fill1);
-            fills1.Append(fill2);
+            var borderNone = new Border();
+            borderNone.Append(new LeftBorder());
+            borderNone.Append(new RightBorder());
+            borderNone.Append(new TopBorder());
+            borderNone.Append(new BottomBorder());
+            borderNone.Append(new DiagonalBorder());
 
-            Borders borders1 = new Borders() { Count = (UInt32Value)1U };
+            var grayColor = new Color { Rgb = "FF606060" }; // dark gray #606060
 
-            Border border1 = new Border();
-            LeftBorder leftBorder1 = new LeftBorder();
-            RightBorder rightBorder1 = new RightBorder();
-            TopBorder topBorder1 = new TopBorder();
-            BottomBorder bottomBorder1 = new BottomBorder();
-            DiagonalBorder diagonalBorder1 = new DiagonalBorder();
+            var borderThin = new Border();
+            var lb = new LeftBorder   { Style = BorderStyleValues.Thin }; lb.Append(grayColor.CloneNode(true));
+            var rb = new RightBorder  { Style = BorderStyleValues.Thin }; rb.Append(grayColor.CloneNode(true));
+            var tb = new TopBorder    { Style = BorderStyleValues.Thin }; tb.Append(grayColor.CloneNode(true));
+            var bb = new BottomBorder { Style = BorderStyleValues.Thin }; bb.Append(grayColor.CloneNode(true));
+            borderThin.Append(lb);
+            borderThin.Append(rb);
+            borderThin.Append(tb);
+            borderThin.Append(bb);
+            borderThin.Append(new DiagonalBorder());
 
-            border1.Append(leftBorder1);
-            border1.Append(rightBorder1);
-            border1.Append(topBorder1);
-            border1.Append(bottomBorder1);
-            border1.Append(diagonalBorder1);
+            borders.Append(borderNone);
+            borders.Append(borderThin);
 
-            borders1.Append(border1);
+            // ── Cell style formats (base formats) ──────────────────────────
+            var cellStyleFormats = new CellStyleFormats { Count = 1U };
+            cellStyleFormats.Append(new CellFormat
+            {
+                NumberFormatId = 0U, FontId = 0U, FillId = 0U, BorderId = 0U
+            });
 
-            CellStyleFormats cellStyleFormats1 = new CellStyleFormats() { Count = (UInt32Value)1U };
-            CellFormat cellFormat1 = new CellFormat() { NumberFormatId = (UInt32Value)0U, FontId = (UInt32Value)0U, FillId = (UInt32Value)0U, BorderId = (UInt32Value)0U };
+            // ── Cell formats ───────────────────────────────────────────────
+            // Index 0: default data     (font 0, fill 0, border 0)
+            // Index 1: date             (font 0, fill 0, border 1, numfmt 14)
+            // Index 2: header           (font 1, fill 2, border 1, centered)
+            // Index 3: normal + border  (font 0, fill 0, border 1)
+            var cellFormats = new CellFormats { Count = 4U };
 
-            cellStyleFormats1.Append(cellFormat1);
+            cellFormats.Append(new CellFormat   // 0 — default
+            {
+                NumberFormatId = 0U, FontId = 0U, FillId = 0U,
+                BorderId = 0U, FormatId = 0U
+            });
 
-            CellFormats cellFormats1 = new CellFormats() { Count = (UInt32Value)2U };
-            CellFormat cellFormat2 = new CellFormat() { NumberFormatId = (UInt32Value)0U, FontId = (UInt32Value)0U, FillId = (UInt32Value)0U, BorderId = (UInt32Value)0U, FormatId = (UInt32Value)0U };
-            CellFormat cellFormat3 = new CellFormat() { NumberFormatId = (UInt32Value)14U, FontId = (UInt32Value)0U, FillId = (UInt32Value)0U, BorderId = (UInt32Value)0U, FormatId = (UInt32Value)0U, ApplyNumberFormat = true };
+            var dateFmt = new CellFormat        // 1 — date + wrap
+            {
+                NumberFormatId = 14U, FontId = 0U, FillId = 0U,
+                BorderId = 1U, FormatId = 0U, ApplyNumberFormat = true,
+                ApplyBorder = true, ApplyAlignment = true
+            };
+            dateFmt.Append(new Alignment { WrapText = true, Vertical = VerticalAlignmentValues.Top });
+            cellFormats.Append(dateFmt);
 
-            cellFormats1.Append(cellFormat2);
-            cellFormats1.Append(cellFormat3);
+            var headerFmt = new CellFormat      // 2 — header
+            {
+                NumberFormatId = 0U, FontId = 1U, FillId = 2U,
+                BorderId = 1U, FormatId = 0U,
+                ApplyFont = true, ApplyFill = true,
+                ApplyBorder = true, ApplyAlignment = true
+            };
+            headerFmt.Append(new Alignment
+            {
+                Horizontal = HorizontalAlignmentValues.Center,
+                Vertical   = VerticalAlignmentValues.Center,
+                WrapText   = false
+            });
+            cellFormats.Append(headerFmt);
 
-            CellStyles cellStyles1 = new CellStyles() { Count = (UInt32Value)1U };
-            CellStyle cellStyle1 = new CellStyle() { Name = "Normal", FormatId = (UInt32Value)0U, BuiltinId = (UInt32Value)0U };
+            var dataFmt = new CellFormat         // 3 — data + border + wrap
+            {
+                NumberFormatId = 0U, FontId = 0U, FillId = 0U,
+                BorderId = 1U, FormatId = 0U,
+                ApplyBorder = true, ApplyAlignment = true
+            };
+            dataFmt.Append(new Alignment { WrapText = true, Vertical = VerticalAlignmentValues.Top });
+            cellFormats.Append(dataFmt);
 
-            cellStyles1.Append(cellStyle1);
-            DifferentialFormats differentialFormats1 = new DifferentialFormats() { Count = (UInt32Value)0U };
-            TableStyles tableStyles1 = new TableStyles() { Count = (UInt32Value)0U, DefaultTableStyle = "TableStyleMedium2", DefaultPivotStyle = "PivotStyleLight16" };
+            // ── Cell styles ────────────────────────────────────────────────
+            var cellStyles = new CellStyles { Count = 1U };
+            cellStyles.Append(new CellStyle
+            {
+                Name = "Normal", FormatId = 0U, BuiltinId = 0U
+            });
 
-            StylesheetExtensionList stylesheetExtensionList1 = new StylesheetExtensionList();
+            // ── Assemble stylesheet ────────────────────────────────────────
+            var stylesheet = new Stylesheet();
+            stylesheet.Append(fonts);
+            stylesheet.Append(fills);
+            stylesheet.Append(borders);
+            stylesheet.Append(cellStyleFormats);
+            stylesheet.Append(cellFormats);
+            stylesheet.Append(cellStyles);
+            stylesheet.Append(new DifferentialFormats { Count = 0U });
+            stylesheet.Append(new TableStyles
+            {
+                Count = 0U,
+                DefaultTableStyle  = "TableStyleMedium2",
+                DefaultPivotStyle  = "PivotStyleLight16"
+            });
 
-            StylesheetExtension stylesheetExtension1 = new StylesheetExtension() { Uri = "{EB79DEF2-80B8-43e5-95BD-54CBDDF9020C}" };
-            stylesheetExtension1.AddNamespaceDeclaration("x14", "http://schemas.microsoft.com/office/spreadsheetml/2009/9/main");
-
-            StylesheetExtension stylesheetExtension2 = new StylesheetExtension() { Uri = "{9260A510-F301-46a8-8635-F512D64BE5F5}" };
-            stylesheetExtension2.AddNamespaceDeclaration("x15", "http://schemas.microsoft.com/office/spreadsheetml/2010/11/main");
-
-            OpenXmlUnknownElement openXmlUnknownElement4 = workbookStylesPart1.CreateUnknownElement("<x15:timelineStyles defaultTimelineStyle=\"TimeSlicerStyleLight1\" xmlns:x15=\"http://schemas.microsoft.com/office/spreadsheetml/2010/11/main\" />");
-
-            stylesheetExtension2.Append(openXmlUnknownElement4);
-
-            stylesheetExtensionList1.Append(stylesheetExtension1);
-            stylesheetExtensionList1.Append(stylesheetExtension2);
-
-            stylesheet1.Append(fonts1);
-            stylesheet1.Append(fills1);
-            stylesheet1.Append(borders1);
-            stylesheet1.Append(cellStyleFormats1);
-            stylesheet1.Append(cellFormats1);
-            stylesheet1.Append(cellStyles1);
-            stylesheet1.Append(differentialFormats1);
-            stylesheet1.Append(tableStyles1);
-            stylesheet1.Append(stylesheetExtensionList1);
-
-            workbookStylesPart1.Stylesheet = stylesheet1;
+            part.Stylesheet = stylesheet;
         }
     }
 }
