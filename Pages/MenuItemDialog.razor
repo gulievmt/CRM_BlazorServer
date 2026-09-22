@@ -14,7 +14,7 @@
 
                 <RadzenFormField Text="Текст пункта меню" Variant="Variant.Filled">
                     <ChildContent>
-                        <RadzenTextBox style="width:100%" @bind-Value="@model.Text" Name="Text" />
+                        <RadzenTextBox Disabled="@(!IsSysAdmin)" style="width:100%" @bind-Value="@model.Text" Name="Text" />
                     </ChildContent>
                     <Helper>
                         <RadzenRequiredValidator Component="Text" Text="Текст обязателен" />
@@ -23,25 +23,35 @@
 
                 <RadzenFormField Text="Path (URL, пусто для групп)" Visible="!HasChildren" Variant="Variant.Filled">
                     <ChildContent>
-                        <RadzenTextBox style="width:100%" @bind-Value="@model.Path" Name="Path" />
+                        <RadzenTextBox Disabled="@(!IsSysAdmin)" style="width:100%" @bind-Value="@model.Path" Name="Path" />
                     </ChildContent>
                 </RadzenFormField>
 
                 <RadzenFormField Text="Иконка (Material Icons)" Variant="Variant.Filled">
                     <ChildContent>
-                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="8px">
-                            <RadzenTextBox style="width:100%" @bind-Value="@model.Icon" Name="Icon" />
-                            @if (!string.IsNullOrEmpty(model.Icon))
-                            {
-                                <RadzenIcon Icon="@model.Icon" Style="font-size:1.5rem; color:var(--rz-primary)" />
-                            }
-                        </RadzenStack>
+                        <RadzenDropDown Disabled="@(!IsSysAdmin)"
+                                        TValue="string"
+                                        @bind-Value="@model.Icon"
+                                        Data="@AvailableIcons"
+                                        AllowFiltering="true"
+                                        AllowClear="true"
+                                        FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                        Placeholder="Выберите иконку"
+                                        Style="width:100%">
+                            <Template Context="iconName">
+                                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="8px">
+                                    <RadzenIcon Icon="@iconName.ToString()" Style="font-size:1.25rem; color:var(--rz-primary)" />
+                                    <RadzenText TextStyle="TextStyle.Body2">@iconName</RadzenText>
+                                </RadzenStack>
+                            </Template>
+                        </RadzenDropDown>
                     </ChildContent>
                 </RadzenFormField>
 
                 <RadzenFormField Text="Родительский пункт (пусто = верхний уровень)" Variant="Variant.Filled">
                     <ChildContent>
-                        <RadzenDropDown TValue="int?" @bind-Value="@model.ParentId"
+                        <RadzenDropDown Disabled="@(!IsSysAdmin)"
+                                        TValue="int?" @bind-Value="@model.ParentId"
                                         Data="@eligibleParents" TextProperty="Text" ValueProperty="Id"
                                         AllowClear="true" Placeholder="— верхний уровень —"
                                         style="width:100%" Name="ParentId" />
@@ -50,7 +60,8 @@
 
                 <RadzenFormField Text="Порядок сортировки" Variant="Variant.Filled">
                     <ChildContent>
-                        <RadzenNumeric TValue="int" style="width:100%"
+                        <RadzenNumeric Disabled="@(!IsSysAdmin)"
+                                       TValue="int" style="width:100%"
                                        @bind-Value="@model.SortOrder" Name="SortOrder" />
                     </ChildContent>
                 </RadzenFormField>
@@ -99,7 +110,7 @@
                                 <RadzenRow AlignItems="AlignItems.Center" style="background:var(--rz-base-background-color); border-radius:4px; padding:0.25rem;">
                                     <RadzenColumn SizeMD="4">
                                         <RadzenDropDown TValue="string" @bind-Value="assignment.RoleName"
-                                                        Data="@availableRoles"
+                                                        Data="@(availableRoles.Where(r => r == assignment.RoleName || !model.SelectedRoles.Any(x => x != assignment && x.RoleName == r)))"
                                                         Placeholder="Выберите роль"
                                                         style="width:100%" />
                                     </RadzenColumn>
@@ -135,7 +146,8 @@
 
             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center"
                          JustifyContent="JustifyContent.End" Gap="0.5rem">
-                <RadzenButton ButtonType="ButtonType.Submit" Icon="save"
+                <RadzenButton Disabled="@(!IsSysAdmin && MenuItemId == 0)"
+                              ButtonType="ButtonType.Submit" Icon="save"
                               Text="Сохранить" Variant="Variant.Flat" />
                 <RadzenButton ButtonStyle="ButtonStyle.Light" Text="Отмена"
                               Click="@CancelClick" Variant="Variant.Flat" />

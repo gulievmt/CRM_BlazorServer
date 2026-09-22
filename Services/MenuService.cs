@@ -104,7 +104,7 @@ namespace CRMBlazorServerRBS.Services
             using var db = CreateConnection();
 
             var item = await db.QueryFirstOrDefaultAsync<MenuItem>(
-                @"SELECT Id, Text, Path, Icon, ParentId, SortOrder, IsActive
+                @"SELECT Id, Text, Path, Icon, ParentId, SortOrder, IsActive, IsFolder
                   FROM [dbo].[MenuItems] WHERE Id = @Id", new { Id = id });
 
             if (item == null) return null;
@@ -123,10 +123,10 @@ namespace CRMBlazorServerRBS.Services
         {
             using var db = CreateConnection();
             var newId = await db.QuerySingleAsync<int>(
-                @"INSERT INTO [dbo].[MenuItems] (Text, Path, Icon, ParentId, SortOrder, IsActive)
-                  VALUES (@Text, @Path, @Icon, @ParentId, @SortOrder, @IsActive);
+                @"INSERT INTO [dbo].[MenuItems] (Text, Path, Icon, ParentId, SortOrder, IsActive, IsFolder)
+                  VALUES (@Text, @Path, @Icon, @ParentId, @SortOrder, @IsActive, @IsFolder);
                   SELECT CAST(SCOPE_IDENTITY() AS INT);",
-                new { model.Text, model.Path, model.Icon, model.ParentId, model.SortOrder, model.IsActive });
+                new { model.Text, model.Path, model.Icon, model.ParentId, model.SortOrder, model.IsActive, model.IsFolder });
 
             await SyncRolesAsync(newId, model.SelectedRoles);
             InvalidateCache();
@@ -139,10 +139,10 @@ namespace CRMBlazorServerRBS.Services
             await db.ExecuteAsync(
                 @"UPDATE [dbo].[MenuItems]
                   SET Text=@Text, Path=@Path, Icon=@Icon, ParentId=@ParentId,
-                      SortOrder=@SortOrder, IsActive=@IsActive
+                      SortOrder=@SortOrder, IsActive=@IsActive, IsFolder=@IsFolder
                   WHERE Id=@Id",
                 new { model.Text, model.Path, model.Icon, model.ParentId,
-                      model.SortOrder, model.IsActive, model.Id });
+                      model.SortOrder, model.IsActive, model.IsFolder, model.Id });
 
             await SyncRolesAsync(model.Id, model.SelectedRoles);
             InvalidateCache();

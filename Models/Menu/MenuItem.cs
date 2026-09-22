@@ -27,6 +27,8 @@ namespace CRMBlazorServerRBS.Models.Menu
 
         public bool IsActive { get; set; } = true;
 
+        public bool IsFolder { get; set; } = false;
+
         // Populated by MenuService — not stored in MenuItems table
         [NotMapped]
         public List<MenuItemRole> AllowedRoles { get; set; } = new();
@@ -39,7 +41,7 @@ namespace CRMBlazorServerRBS.Models.Menu
         public bool HasChildren = false;
 
         [NotMapped]
-        public string IconName => HasChildren ? "folder" : "article";
+        public string IconName => HasChildren || IsFolder ? "folder" : "article";
 
         public void CopyFrom(MenuItem src)
         {
@@ -52,6 +54,7 @@ namespace CRMBlazorServerRBS.Models.Menu
             AllowedRoles = src.AllowedRoles;
             Children     = src.Children;
             HasChildren  = src.HasChildren;
+            IsFolder     = src.IsFolder;
         }
     }
 }

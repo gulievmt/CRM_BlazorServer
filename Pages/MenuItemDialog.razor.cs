@@ -12,6 +12,7 @@ namespace CRMBlazorServerRBS.Pages
 {
     public partial class MenuItemDialog
     {
+        protected bool IsSysAdmin;
         [Inject] protected IJSRuntime JSRuntime { get; set; }
         [Inject] protected NavigationManager NavigationManager { get; set; }
         [Inject] protected DialogService DialogService { get; set; }
@@ -53,6 +54,9 @@ namespace CRMBlazorServerRBS.Pages
 
         protected override async Task OnInitializedAsync()
         {
+
+            IsSysAdmin = Security.IsInRole( "sysadmin" );
+
             availableRoles = (await Security.GetRoles()).Select(r => r.Name);
 
             eligibleParents = AllMenuItems
@@ -96,10 +100,13 @@ namespace CRMBlazorServerRBS.Pages
 
         protected void AddRoleAssignment()
         {
+            var usedRoles = model.SelectedRoles.Select(r => r.RoleName).ToHashSet();
+            var nextRole = availableRoles.FirstOrDefault(r => !usedRoles.Contains(r));
+
             model.SelectedRoles.Add(new MenuItemRoleAssignment
             {
-                RoleName   = availableRoles.FirstOrDefault(),
-                Scope      = "all",
+                RoleName = nextRole,
+                Scope = "all",
                 Permission = "read"
             });
         }
@@ -113,6 +120,34 @@ namespace CRMBlazorServerRBS.Pages
         {
             try
             {
+
+                if (submittedModel.SelectedRoles.Select(r => r.RoleName).Distinct().Count()  != submittedModel.SelectedRoles.Count)
+                {
+                    errorVisible = true;
+                    error = "Роль нельзя назначать более одного раза.";
+                    return;
+                }
+
+                if (!IsSysAdmin)
+                {
+                    if (MenuItemId == 0)
+                    {
+                        errorVisible = true;
+                        error = "Недостаточно прав для создания пункта меню.";
+                        return;
+                    }
+
+                    // не-sysadmin может менять только SelectedRoles —
+                    // остальные поля принудительно возвращаем к исходным значениям
+                    var existing = await MenuService.GetMenuItemByIdAsync(MenuItemId);
+                    submittedModel.Text = existing.Text;
+                    submittedModel.Path = existing.Path;
+                    submittedModel.Icon = existing.Icon;
+                    submittedModel.ParentId = existing.ParentId;
+                    submittedModel.SortOrder = existing.SortOrder;
+                    submittedModel.IsActive = existing.IsActive;
+                }
+
                 if (MenuItemId == 0)
                     await MenuService.CreateMenuItemAsync(submittedModel);
                 else
@@ -128,5 +163,24 @@ namespace CRMBlazorServerRBS.Pages
         }
 
         protected void CancelClick() => DialogService.Close(null);
+
+        protected static readonly List<string> AvailableIcons = new()
+{
+    "home", "menu", "settings", "dashboard", "person", "people",
+    "group", "lock", "lock_open", "visibility", "visibility_off",
+    "edit", "delete", "add", "remove", "save", "search", "filter_list",
+    "list", "grid_view", "apps", "folder", "folder_open", "description",
+    "insert_drive_file", "attach_file", "cloud", "cloud_upload", "cloud_download",
+    "notifications", "notifications_active", "mail", "chat", "phone",
+    "calendar_today", "event", "schedule", "assignment", "task",
+    "check_circle", "cancel", "warning", "info", "error",
+    "arrow_back", "arrow_forward", "expand_more", "expand_less",
+    "star", "star_border", "favorite", "favorite_border",
+    "shopping_cart", "attach_money", "receipt", "account_balance",
+    "business", "work", "store", "inventory", "local_shipping",
+    "bar_chart", "pie_chart", "trending_up", "trending_down",
+    "print", "download", "upload", "share", "link", "refresh",
+    "logout", "login", "exit_to_app", "vpn_key", "admin_panel_settings"
+};
     }
 }
