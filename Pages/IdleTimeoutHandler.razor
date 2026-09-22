@@ -1,0 +1,36 @@
+@inject IJSRuntime JS
+@inject SecurityService Security
+@implements IAsyncDisposable
+
+@code {
+    // Время простоя до автоматического logout
+    private const int IdleTimeoutMinutes = 20;
+
+    private IJSObjectReference module;
+    private DotNetObjectReference<IdleTimeoutHandler> dotnetRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        dotnetRef = DotNetObjectReference.Create(this);
+        module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/idleTimeout.js");
+        await module.InvokeVoidAsync("start", dotnetRef, IdleTimeoutMinutes * 60 * 1000);
+    }
+
+    [JSInvokable]
+    public void OnIdleTimeout()
+    {
+        Security.Logout();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (module != null)
+        {
+            try { await module.InvokeVoidAsync("stop"); } catch { /* circuit может быть уже закрыт */ }
+            await module.DisposeAsync();
+        }
+        dotnetRef?.Dispose();
+    }
+}
